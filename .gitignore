@@ -1,0 +1,6 @@
+node_modules/
+webui/dist/
+webui/node_modules/
+webui/.vite/
+*.log
+*.tgz
