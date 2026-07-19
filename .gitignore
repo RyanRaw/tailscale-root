@@ -4,3 +4,4 @@ webui/node_modules/
 webui/.vite/
 *.log
 *.tgz
+webui/bash.exe.stackdump
