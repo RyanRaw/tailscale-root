@@ -45,7 +45,7 @@
         >
           <div class="flex items-center gap-2">
             <span class="text-base-content/30 min-w-6 text-xs tabular-nums">
-              {{ String(i + 1).padStart(2, '0') }}
+              {{ String((entry as any).seq || i + 1).padStart(3, '0') }}
             </span>
             <span
               class="text-[11px] font-medium tracking-wide uppercase"
@@ -84,18 +84,22 @@ const follow = ref(true)
 let followTimer: number | undefined
 
 function parseLine(line: string): LogEntry | null {
-  const m = line.match(/^time="([^"]+)"\s+level=(\w+)\s+msg="(.*)"$/)
-  if (m) {
+  if (!line.trim() || line.includes('[RATELIMIT]')) return null
+  const m1 = line.match(/^time="([^"]+)"\s+level=(\w+)\s+msg="(.*)"$/)
+  if (m1) {
     return {
-      time: m[1].replace(/T/, ' ').replace(/\.\d+\+.*/, ''),
-      level: m[2],
-      msg: m[3],
+      time: m1[1].replace(/T/, ' ').replace(/\.\d+\+.*/, ''),
+      level: m1[2],
+      msg: m1[3],
     }
   }
-  if (line.trim()) {
-    return { time: '', level: 'info', msg: line }
+  const m2 = line.match(/^(\d{4}\/\d{2}\/\d{2}\s+\d{2}:\d{2}:\d{2})\s+(.*)/)
+  if (m2) {
+    const msg = m2[2]
+    const level = /error|fatal|panic/i.test(msg) ? 'error' : /warn/i.test(msg) ? 'warning' : 'info'
+    return { time: m2[1], level, msg }
   }
-  return null
+  return { time: '', level: 'info', msg: line }
 }
 
 function levelColor(level: string) {
@@ -113,7 +117,9 @@ const loadLogs = async () => {
   loadingLogs.value = true
   try {
     const res = await exec(`tail -300 ${LOG} 2>/dev/null || echo ''`)
-    logs.value = res.stdout.split('\n').map(parseLine).filter(Boolean) as LogEntry[]
+    const parsed = res.stdout.split('\n').map(parseLine).filter(Boolean) as LogEntry[]
+    parsed.forEach((e, i) => { (e as any).seq = i + 1 })
+    logs.value = parsed.reverse()
   } finally {
     loadingLogs.value = false
   }
@@ -123,8 +129,9 @@ const followTick = async () => {
   if (!follow.value) return
   const res = await exec(`tail -300 ${LOG} 2>/dev/null || echo ''`)
   const parsed = res.stdout.split('\n').map(parseLine).filter(Boolean) as LogEntry[]
-  if (parsed.length !== logs.value.length || (parsed.length > 0 && parsed[parsed.length - 1].msg !== logs.value[logs.value.length - 1]?.msg)) {
-    logs.value = parsed
+  if (parsed.length !== logs.value.length || (parsed.length > 0 && parsed[parsed.length - 1].msg !== logs.value[0]?.msg)) {
+    parsed.forEach((e, i) => { (e as any).seq = i + 1 })
+    logs.value = parsed.reverse()
   }
 }
 
