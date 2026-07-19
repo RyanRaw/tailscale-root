@@ -13,7 +13,7 @@ else
   if echo "$line" | grep -q "^100\."; then
     ip=$(echo "$line" | awk '{print $1}')
     host=$(echo "$line" | awk '{print $2}')
-    online=$($TS --socket="$TS_DIR/sock" status 2>/dev/null | grep "^100\." | grep -cv "offline")
+    online=$($TS --socket="$TS_DIR/sock" status --json 2>/dev/null | grep -c '"Online": true')
     desc="✅ 已连接 | $host | $ip | ${online} 个在线 | v$ver"
   elif echo "$line" | grep -qi "logged out\|NeedsLogin\|not logged"; then
     desc="⚠️ 需要登录 | v$ver"

@@ -167,8 +167,9 @@ const peers = computed(() => {
     return (a.HostName || '').localeCompare(b.HostName || '')
   })
 })
-const onlineCount = computed(() => peers.value.filter((p: any) => p.Online).length + (selfNode.value ? 1 : 0))
-const totalCount = computed(() => peers.value.length + (selfNode.value ? 1 : 0))
+const allNodes = computed(() => selfNode.value ? [selfNode.value, ...peers.value] : peers.value)
+const onlineCount = computed(() => (allNodes.value as any[]).filter((n: any) => n.Online).length)
+const totalCount = computed(() => allNodes.value.length)
 const filteredPeers = computed(() => showOffline.value ? peers.value : peers.value.filter((p: any) => p.Online))
 const hasPeers = computed(() => peers.value.length > 0)
 

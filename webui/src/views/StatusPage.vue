@@ -214,9 +214,13 @@ const userName = computed(() => {
 const tailnetName = computed(() => {
   return state.value.status?.MagicDNSSuffix?.replace(/\.ts\.net$/, '') || '—'
 })
-const selfOnline = computed(() => state.value.status?.Self ? 1 : 0)
-const peerCount = computed(() => Object.keys(state.value.status?.Peer || {}).length + selfOnline.value)
-const onlineCount = computed(() => Object.values(state.value.status?.Peer || {}).filter((p: any) => p.Online).length + selfOnline.value)
+const allNodes = computed(() => {
+  const self = state.value.status?.Self
+  const peers = Object.values(state.value.status?.Peer || {}) as any[]
+  return self ? [self, ...peers] : peers
+})
+const peerCount = computed(() => allNodes.value.length)
+const onlineCount = computed(() => allNodes.value.filter((n: any) => n.Online).length)
 
 function copyText(t: string) { navigator.clipboard?.writeText(t) }
 
