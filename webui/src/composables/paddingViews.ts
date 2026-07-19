@@ -24,13 +24,10 @@ export const usePaddingForViews = (
   })
 
   const padding = computed(() => {
-    if (isMiddleScreen.value) {
-      return {
-        paddingTop: `${paddingTop.value}px`,
-        paddingBottom: `${paddingBottom.value}px`,
-      }
+    return {
+      paddingTop: `${Math.max(ctrlsBottom.value, 48) + offsetTop}px`,
+      paddingBottom: `${Math.max(dockTop.value, 56) + offsetBottom}px`,
     }
-    return {}
   })
 
   return {

@@ -16,19 +16,9 @@
     <RouterView v-slot="{ Component, route }">
       <div class="relative flex-1 overflow-hidden">
         <div class="absolute flex h-full w-full flex-col overflow-y-auto">
-          <Transition
-            :name="(route.meta.transition as string) || 'fade'"
-            v-if="isMiddleScreen"
-          >
-            <Component :is="Component" />
-          </Transition>
-          <Transition
-            v-else
-            name="page"
-            mode="out-in"
-          >
-            <Component :is="Component" />
-          </Transition>
+          <KeepAlive>
+            <Component :is="Component" :key="route.name" />
+          </KeepAlive>
         </div>
 
         <template v-if="isMiddleScreen">

@@ -16,7 +16,10 @@
       </div>
     </CtrlsBar>
 
-    <div class="mx-auto w-full max-w-3xl space-y-1 p-3 md:px-8 md:py-6">
+    <div v-if="!state.loaded" class="flex h-full items-center justify-center">
+      <span class="loading loading-spinner loading-lg text-base-content/30"></span>
+    </div>
+    <div v-else class="mx-auto w-full max-w-3xl space-y-1 p-3 md:px-8 md:py-6">
       <!-- Hero Status -->
       <div class="base-container">
         <div class="bg-base-200/30 flex items-center gap-4 rounded-xl p-4">

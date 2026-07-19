@@ -27,16 +27,13 @@
       </div>
     </CtrlsBar>
 
-    <div class="mx-auto w-full max-w-3xl space-y-1 p-3 md:px-8 md:py-6">
+    <div v-if="!state.loaded" class="flex h-full items-center justify-center">
+      <span class="loading loading-spinner loading-lg text-base-content/30"></span>
+    </div>
+    <div v-else class="mx-auto w-full max-w-3xl space-y-1 p-3 md:px-8 md:py-6">
 
       <div
-        v-if="!state.loaded"
-        class="text-base-content/40 py-8 text-center text-sm"
-      >
-        加载中…
-      </div>
-      <div
-        v-else-if="!hasPeers"
+        v-if="!hasPeers"
         class="text-base-content/40 py-8 text-center text-sm"
       >
         暂无节点
