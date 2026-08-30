@@ -6,11 +6,26 @@ MODDIR=/data/adb/modules/tailscale_root
 
 mkdir -p "$TS_DIR/state" "$TS_DIR/log"
 
+ensure_svm_guard() {
+  guard_pid=$(cat "$TS_DIR/svm_guard.pid" 2>/dev/null)
+  if [ -n "$guard_pid" ] && kill -0 "$guard_pid" 2>/dev/null; then
+    guard_cmdline=$(tr '\0' ' ' <"/proc/$guard_pid/cmdline" 2>/dev/null)
+    case "$guard_cmdline" in
+      *"$MODDIR/svm_guard.sh"*) return 0 ;;
+    esac
+  fi
+
+  rm -f "$TS_DIR/svm_guard.pid"
+  nohup setsid sh "$MODDIR/svm_guard.sh" \
+    </dev/null >"$TS_DIR/log/svm_guard.out" 2>&1 &
+}
+
 # Update module description in background (every 30s)
 (
   sleep 8
   while true; do
     sh "$MODDIR/update_desc.sh"
+    ensure_svm_guard
     sleep 30
   done
 ) </dev/null >/dev/null 2>&1 &
@@ -18,9 +33,14 @@ mkdir -p "$TS_DIR/state" "$TS_DIR/log"
 # ---- user config (/data/adb/tailscale/env) ----
 TS_PROXY=""; TS_PORT="41641"; TS_HOSTNAME=""
 [ -f "$TS_DIR/env" ] && . "$TS_DIR/env"
-[ -z "$TS_PROXY" ] && [ -d /data/adb/box ] && TS_PROXY="http://127.0.0.1:7890"
+# disabled: eBPF handles proxying transparently
+# [ -z "$TS_PROXY" ] && [ -d /data/adb/box ] && TS_PROXY="http://127.0.0.1:7890"
 
 [ -x "$TS_DIR/bin/tailscaled" ] || exit 0
+
+# This must run before either existing-daemon early return below. Otherwise a
+# dead guard leaves src_valid_mark=1 until the next reboot or manual repair.
+ensure_svm_guard
 
 if [ -f "$PIDFILE" ]; then
   op=$(cat "$PIDFILE" 2>/dev/null)
@@ -67,9 +87,6 @@ nohup "$TS_DIR/bin/tailscaled" \
   --port="$TS_PORT" \
   < /dev/null >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"
-
-# src_valid_mark guard
-nohup setsid sh "$MODDIR/svm_guard.sh" </dev/null >/dev/null 2>&1 &
 
 # Post-start burst: squash src_valid_mark=1 within 1s for the first minute
 ( i=0; while [ $i -lt 60 ]; do
