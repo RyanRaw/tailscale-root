@@ -95,8 +95,13 @@ fi
 VERBOSE_ARG=""
 [ "$TS_LOGLEVEL" = "debug" ] && VERBOSE_ARG="--verbose=2"
 
-# one network snapshot per daemon start
-sh "$MODDIR/net_probe.sh" now >/dev/null 2>&1
+# tailscaled has no quiet flag — it always writes to stderr. Silent means routing
+# it to /dev/null, otherwise "quiet" still grows tailscaled.log.
+DAEMON_LOG="$LOG"
+[ "$TS_LOGLEVEL" = "quiet" ] && DAEMON_LOG="/dev/null"
+
+# one network snapshot per daemon start (skipped when logging is silenced)
+[ "$TS_LOGLEVEL" != "quiet" ] && sh "$MODDIR/net_probe.sh" now >/dev/null 2>&1
 
 # 1.104+ 的二进制自带 androiddns（走 dnsproxyd），正常无需任何 DNS 辅助。
 # 这里只在 androiddns 不可用、且用户显式开启兜底时，才拉起回环转发器。
@@ -112,7 +117,7 @@ nohup "$TS_DAEMON" \
   --port="$TS_PORT" \
   $VERBOSE_ARG \
   $TS_EXTRA_ARGS \
-  < /dev/null >> "$LOG" 2>&1 &
+  < /dev/null >> "$DAEMON_LOG" 2>&1 &
 echo $! > "$PIDFILE"
 
 # Pre-auth key configured: register automatically when the node still needs a login.

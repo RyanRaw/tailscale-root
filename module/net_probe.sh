@@ -19,6 +19,9 @@ case "$TS_LOGLEVEL" in
   quiet) interval=86400 ;;
 esac
 
+# 静默级别下彻底不写定时快照；状态页「抓取」传 now，仍然能手动采一份
+[ "$TS_LOGLEVEL" = "quiet" ] && [ "$MODE" != "now" ] && exit 0
+
 stamp_file="$TS_DIR/.probe_stamp"
 now=$(date +%s)
 if [ "$MODE" != "now" ]; then
