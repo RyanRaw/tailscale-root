@@ -22,6 +22,16 @@
             <span class="text-sm">{{ state.binVersion || '未安装' }}</span>
           </div>
           <div class="setting-item">
+            <div class="setting-item-label">内置版本</div>
+            <span class="text-sm">
+              <template v-if="bundle.available">
+                {{ bundle.version }}
+                <span class="text-base-content/40 text-xs ml-1">{{ bundle.arch }}</span>
+              </template>
+              <span v-else class="text-base-content/40">不可用</span>
+            </span>
+          </div>
+          <div class="setting-item">
             <div class="setting-item-label">最新版本</div>
             <div class="flex items-center gap-2">
               <span v-if="checking" class="loading loading-spinner loading-xs"></span>
@@ -33,8 +43,15 @@
               <span v-else class="text-base-content/40 text-sm">未检查</span>
             </div>
           </div>
-          <div class="setting-item justify-end gap-2" :style="displayLog.length ? 'border-bottom: none' : ''"
+          <div class="setting-item justify-end gap-2 flex-wrap" :style="displayLog.length ? 'border-bottom: none' : ''"
           >
+            <button
+              class="btn btn-primary btn-sm"
+              :disabled="installing || !bundle.available"
+              @click="installBundle"
+            >
+              {{ bundleLabel }}
+            </button>
             <button
               class="btn btn-ghost btn-sm"
               :disabled="checking || installing"
@@ -43,11 +60,11 @@
               检查更新
             </button>
             <button
-              class="btn btn-primary btn-sm"
+              class="btn btn-ghost btn-sm"
               :disabled="installing || (!latestVersion && !customUrl)"
               @click="startInstall"
             >
-              {{ installing ? '安装中…' : hasUpdate ? '更新' : '安装' }}
+              在线安装
             </button>
           </div>
           <!-- Install log -->
@@ -116,14 +133,67 @@ const latestVersion = ref('')
 const installLog = ref<string[]>([])
 const logContainer = ref<HTMLElement>()
 
+const bundle = ref({ available: false, version: '', arch: '' })
+
 const hasUpdate = computed(() => {
   if (!latestVersion.value || !state.value.binVersion) return false
   return latestVersion.value !== state.value.binVersion
 })
 
+const bundleLabel = computed(() => {
+  if (installing.value) return '安装中…'
+  if (!bundle.value.available) return '无内置版本'
+  if (!state.value.binInstalled) return '安装内置'
+  if (bundle.value.version && state.value.binVersion !== bundle.value.version) return '切换到内置'
+  return '重装内置'
+})
+
 const displayLog = computed(() =>
   installLog.value.filter(l => !l.startsWith('__'))
 )
+
+const pushLog = (text: string) => {
+  const lines = text.split('\n').filter(l => l.trim() && !l.startsWith('__'))
+  if (lines.length) installLog.value = [...installLog.value, ...lines]
+  nextTick(() => {
+    if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight
+  })
+}
+
+const loadBundle = async () => {
+  const r = await exec(`sh ${MODDIR}/install_bins.sh --info 2>/dev/null`)
+  const kv: Record<string, string> = {}
+  r.stdout.split('\n').forEach((l) => {
+    const i = l.indexOf('=')
+    if (i > 0) kv[l.slice(0, i)] = l.slice(i + 1).trim()
+  })
+  bundle.value = {
+    available: kv.AVAILABLE === '1',
+    version: kv.BUNDLED || '',
+    arch: kv.ARCH || '',
+  }
+}
+
+const installBundle = async () => {
+  if (installing.value) return
+  installing.value = true
+  installLog.value = []
+  try {
+    const r = await exec(`sh ${MODDIR}/install_bins.sh --force 2>&1`)
+    pushLog(r.stdout + '\n' + r.stderr)
+    if (r.errno === 0) {
+      await exec(`TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh 2>/dev/null`)
+      pushLog('✓ 守护进程已重启')
+      state.value.binInstalled = false
+      await refresh()
+    } else {
+      pushLog('✗ 安装失败')
+    }
+  } finally {
+    installing.value = false
+    loadBundle()
+  }
+}
 
 const checkLatest = async () => {
   checking.value = true
@@ -145,7 +215,7 @@ let pollTimer: number | undefined
 
 const pollLog = async () => {
   const r = await exec('cat ' + LOG_FILE + ' 2>/dev/null || echo ""')
-  const lines = r.stdout.split('\n').filter((l: string) => l.trim())
+  const lines = r.stdout.split('\n').filter((l) => l.trim())
   installLog.value = lines
   await nextTick()
   if (logContainer.value) logContainer.value.scrollTop = logContainer.value.scrollHeight
@@ -205,6 +275,8 @@ const startInstall = async () => {
     'echo "解压安装中…"',
     'cd ' + TS_DIR + ' && rm -rf tmp && mkdir tmp && tar -xzf dl.tgz -C tmp 2>&1 && cp tmp/*/tailscale bin/ && cp tmp/*/tailscaled bin/ && chmod 755 bin/tailscale bin/tailscaled && rm -rf tmp dl.tgz',
     '[ $? -ne 0 ] && echo "__FAIL__ 解压失败" && exit 1',
+    // user-installed binaries are no longer module managed
+    'rm -f ' + TS_DIR + '/bin/.managed_version',
     'echo "✓ 安装完成"',
     'VER=$(' + TS_DIR + '/bin/tailscale --version 2>/dev/null | head -1)',
     'echo "已安装: $VER"',
@@ -220,6 +292,7 @@ const startInstall = async () => {
 }
 
 onMounted(() => {
+  loadBundle()
   refresh()
   checkLatest()
 })

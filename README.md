@@ -5,10 +5,11 @@ A KernelSU / Magisk / APatch module that runs [Tailscale](https://tailscale.com)
 ## Features
 
 - **Root daemon**: Runs `tailscaled` directly as root — no VPN service slot needed
+- **Bundled binaries**: official `tailscale` / `tailscaled` (arm64) ship inside the module and are deployed on boot — no network needed
 - **WebUI**: Full management interface accessible from KernelSU Manager
   - Status overview with real-time uptime counter
   - Peer list with latency testing (progressive bar chart)
-  - Binary installer/updater (non-blocking, background download)
+  - Bundled installer with optional online updater (non-blocking, background download)
   - Log viewer with level-based coloring
   - Settings: theme switching + Tailscale env configuration
   - Privacy toggle for sensitive info (IP, username)
@@ -22,8 +23,12 @@ A KernelSU / Magisk / APatch module that runs [Tailscale](https://tailscale.com)
 
 1. Download the latest release zip
 2. Install via KernelSU / Magisk / APatch manager
-3. Place Tailscale binaries at `/data/adb/tailscale/bin/tailscale` and `/data/adb/tailscale/bin/tailscaled` (or use the WebUI installer)
+3. Reboot — the bundled binaries are deployed to `/data/adb/tailscale/bin/` automatically
 4. Open the module WebUI from KernelSU Manager to configure and connect
+
+Binaries are synced again on boot only when the module ships a new bundled
+version; a binary you installed yourself (via the WebUI online installer) is
+left untouched.
 
 ## Configuration
 
@@ -43,11 +48,13 @@ These can also be edited from the WebUI Settings page.
 ```
 module/                 # KSU module files (deployable)
 ├── module.prop
+├── bins/               # Bundled binaries: bins/<arch>/{tailscale,tailscaled,VERSION}
+├── install_bins.sh     # Deploys / renews the bundled binaries
 ├── service.sh          # Daemon launcher + description updater
 ├── action.sh           # One-tap toggle
 ├── svm_guard.sh        # src_valid_mark watchdog + health check
 ├── update_desc.sh      # Module description status updater
-├── post-fs-data.sh     # Directory initialization
+├── post-fs-data.sh     # Directory init + bundled binary deploy
 └── webroot/index.html  # Built WebUI (single-file)
 
 webui/                  # WebUI source (Vue 3 + Tailwind CSS + DaisyUI)
