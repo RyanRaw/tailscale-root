@@ -32,6 +32,7 @@ ensure_svm_guard() {
 
 # ---- user config (/data/adb/tailscale/env) ----
 TS_PROXY=""; TS_PORT="41641"; TS_HOSTNAME=""; TS_TUN="tailscale0"; TS_EXTRA_ARGS=""
+TS_AUTHKEY=""
 [ -f "$TS_DIR/env" ] && . "$TS_DIR/env"
 # disabled: eBPF handles proxying transparently
 # [ -z "$TS_PROXY" ] && [ -d /data/adb/box ] && TS_PROXY="http://127.0.0.1:7890"
@@ -95,6 +96,20 @@ nohup "$TS_DAEMON" \
   $TS_EXTRA_ARGS \
   < /dev/null >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"
+
+# Pre-auth key configured: register automatically when the node still needs a login.
+if [ -n "$TS_AUTHKEY" ]; then
+  (
+    i=0
+    while [ $i -lt 15 ] && [ ! -S "$TS_DIR/sock" ]; do sleep 1; i=$((i+1)); done
+    [ -S "$TS_DIR/sock" ] || exit 0
+    bs=$("$TS_DIR/bin/tailscale" --socket="$TS_DIR/sock" status --json 2>/dev/null \
+         | grep -o '"BackendState": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"//')
+    case "$bs" in
+      NeedsLogin|NoState|"") sh "$MODDIR/ts_up.sh" >>"$TS_DIR/log/up.log" 2>&1 ;;
+    esac
+  ) </dev/null >/dev/null 2>&1 &
+fi
 
 # Post-start burst: squash src_valid_mark=1 within 1s for the first minute
 ( i=0; while [ $i -lt 60 ]; do

@@ -46,15 +46,20 @@
             </span>
           </div>
           <div class="ml-auto flex gap-2">
-            <template v-if="state.daemonRunning && isOnline">
+            <template v-if="state.daemonRunning">
+              <button
+                v-if="!isOnline"
+                class="btn btn-primary btn-sm"
+                :disabled="busy"
+                @click="tsUp"
+              >
+                {{ hasAuthKey ? '密钥登录' : '获取登录链接' }}
+              </button>
               <button class="btn btn-sm" :disabled="busy" @click="restartDaemon">重启</button>
               <button class="btn btn-error btn-sm" :disabled="busy" @click="stopDaemon">停止</button>
             </template>
-            <template v-else-if="needsLogin">
-              <button v-if="!state.authURL" class="btn btn-primary btn-sm" :disabled="busy" @click="tsUp">获取链接</button>
-            </template>
             <button
-              v-else-if="!state.daemonRunning"
+              v-else
               class="btn btn-success btn-sm"
               :disabled="busy || !state.binInstalled"
               @click="startDaemon"
@@ -169,13 +174,19 @@ import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
 
 const showPrivacy = ref(false)
 const upError = ref('')
+const hasAuthKey = ref(false)
+
+const loadAuthKey = async () => {
+  const r = await exec("sed -n 's/^TS_AUTHKEY=//p' /data/adb/tailscale/env 2>/dev/null | head -1")
+  hasAuthKey.value = r.stdout.trim().replace(/^["']|["']$/g, '').length > 0
+}
 const uptimeSeconds = ref(0)
 let uptimeTimer: number | undefined
 
@@ -329,10 +340,15 @@ watch(() => state.value.etime, (v) => {
 })
 
 onMounted(() => {
+  loadAuthKey()
   refresh()
   uptimeTimer = setInterval(() => {
     if (state.value.daemonRunning) uptimeSeconds.value++
   }, 1000) as unknown as number
+})
+onActivated(() => {
+  loadAuthKey()
+  refresh()
 })
 onUnmounted(() => {
   stopLoginPoll()

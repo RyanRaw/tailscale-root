@@ -235,6 +235,9 @@ const saveEnv = async () => {
     const content = newLines.join('\\n')
     const w = await exec(`printf '${content}\\n' > ${TS_ENV_FILE}`)
     if (w.errno !== 0) { saveMessage.value = '保存失败'; saveError.value = true }
+    else if (envVars.TS_AUTHKEY || envVars.TS_LOGIN_SERVER) {
+      saveMessage.value = '已保存，到状态页重新登录后生效'
+    }
     else { saveMessage.value = '已保存' }
   } catch (e) { saveMessage.value = '错误'; saveError.value = true }
   finally { saving.value = false }
