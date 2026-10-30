@@ -149,9 +149,6 @@
           <button class="btn btn-ghost btn-xs" :disabled="diagBusy" @click="runDiag">
             {{ diagBusy ? '抓取中…' : '抓取' }}
           </button>
-          <button class="btn btn-ghost btn-xs text-primary" :disabled="diagBusy" @click="fixNet">
-            修复
-          </button>
         </div>
         <div class="settings-grid">
           <div v-if="!diag" class="setting-item justify-center">
@@ -358,17 +355,6 @@ async function runDiag() {
   } finally {
     diagBusy.value = false
   }
-}
-
-async function fixNet() {
-  if (diagBusy.value) return
-  diagBusy.value = true
-  try {
-    await exec(`sh ${MODDIR}/root_net.sh; sh ${MODDIR}/update_resolv.sh`)
-  } finally {
-    diagBusy.value = false
-  }
-  await runDiag()
 }
 
 function fixSvm() {
