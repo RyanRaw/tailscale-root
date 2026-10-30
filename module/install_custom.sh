@@ -33,6 +33,32 @@ if [ -n "$CLI_SRC" ] && [ ! -f "$CLI_SRC" ]; then
   exit 2
 fi
 
+# ---- local package: accept the official .tgz as well -----------------------
+SRC_ORIG="$SRC"
+CLEANUP_DIR=""
+case "$SRC" in
+  *.tgz|*.tar.gz)
+    CLEANUP_DIR="$BIN_DIR/.unpack"
+    rm -rf "$CLEANUP_DIR"
+    mkdir -p "$CLEANUP_DIR" || exit 3
+    echo "解包 $(basename "$SRC") …"
+    if ! tar -xzf "$SRC" -C "$CLEANUP_DIR" 2>/dev/null; then
+      rm -rf "$CLEANUP_DIR"
+      echo "✗ 解包失败（不是有效的 tar.gz 包）"
+      exit 5
+    fi
+    D=$(find "$CLEANUP_DIR" -type f -name tailscaled 2>/dev/null | head -1)
+    C=$(find "$CLEANUP_DIR" -type f -name tailscale 2>/dev/null | head -1)
+    if [ -z "$D" ]; then
+      rm -rf "$CLEANUP_DIR"
+      echo "✗ 压缩包内未找到 tailscaled"
+      exit 5
+    fi
+    [ -z "$CLI_SRC" ] && [ -n "$C" ] && CLI_SRC="$C"
+    SRC="$D"
+    ;;
+esac
+
 mkdir -p "$BIN_DIR" || exit 3
 
 # ---- stage + sanity check (arch mismatch / not a tailscaled build) ---------
@@ -97,9 +123,10 @@ fi
 # user-owned build: the module must not replace it on boot
 rm -f "$BIN_DIR/.managed_version"
 {
-  echo "src=$(printf '%s' "$SRC")"
+  echo "src=$(printf '%s' "$SRC_ORIG")"
   echo "time=$(date '+%F %T')"
 } > "$BIN_DIR/.custom"
+[ -n "$CLEANUP_DIR" ] && rm -rf "$CLEANUP_DIR"
 
 echo "✓ 已安装自定义 tailscaled（模块更新不会覆盖它）"
 echo "  重启守护进程后生效；如自建版本需要额外参数，"

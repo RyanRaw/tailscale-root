@@ -1,6 +1,6 @@
 id=tailscale_root
 name=Tailscale Root
-version=v0.4.0
-versionCode=4
+version=v0.4.1
+versionCode=5
 author=Lxns
 description=Standalone root tailscaled with bundled or self-built binaries (offline install, arm64) and WebUI (status / peers / latency chart / updater / logs), plus one-tap Action toggle. Auto hostname from device name, optional HTTP-proxy egress (auto-detects Box for Root), src_valid_mark guard keeps tproxy modules working alongside WireGuard. Config: /data/adb/tailscale/env

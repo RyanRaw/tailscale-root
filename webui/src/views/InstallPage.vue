@@ -99,7 +99,7 @@
               v-model="customDaemon"
               type="text"
               class="input input-sm w-52"
-              placeholder="/sdcard/Download/tailscaled 或目录"
+              placeholder="/sdcard/Download/tailscaled、目录或 .tgz"
               :disabled="installing"
             />
           </div>
@@ -118,12 +118,27 @@
           </div>
           <div class="setting-item justify-end gap-2 flex-wrap">
             <span class="text-xs text-base-content/40">自建版本不会被模块更新覆盖</span>
+            <button class="btn btn-ghost btn-sm" :disabled="scanning || installing" @click="scanBinaries">
+              {{ scanning ? '扫描中…' : '扫描设备文件' }}
+            </button>
             <button
               class="btn btn-sm"
               :disabled="installing || !customDaemon.trim()"
               @click="installCustom"
             >
               安装自定义
+            </button>
+          </div>
+          <div v-if="candidates.length" class="flex flex-wrap gap-1 px-3 pt-1 pb-2">
+            <button
+              v-for="c in candidates"
+              :key="c"
+              class="btn btn-xs btn-ghost normal-case font-normal"
+              :title="c"
+              :disabled="installing"
+              @click="customDaemon = c"
+            >
+              {{ baseName(c) }}
             </button>
           </div>
           <div v-if="bundle.customSrc" class="setting-item">
@@ -183,6 +198,24 @@ const logContainer = ref<HTMLElement>()
 const bundle = ref({ available: false, version: '', arch: '', custom: false, customSrc: '' })
 const customDaemon = ref('')
 const customCli = ref('')
+const candidates = ref<string[]>([])
+const scanning = ref(false)
+
+const baseName = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+
+const scanBinaries = async () => {
+  if (scanning.value) return
+  scanning.value = true
+  try {
+    const r = await exec(
+      "find /sdcard/Download /sdcard/Downloads /sdcard /data/local/tmp -maxdepth 1 -type f -iname '*tailscale*' 2>/dev/null | head -60",
+    )
+    candidates.value = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean)
+    if (!candidates.value.length) pushLog('未在常用目录找到 tailscale 相关文件')
+  } finally {
+    scanning.value = false
+  }
+}
 
 const hasUpdate = computed(() => {
   if (!latestVersion.value || !state.value.binVersion) return false
