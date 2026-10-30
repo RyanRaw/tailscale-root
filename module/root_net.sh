@@ -12,15 +12,26 @@ LOG="$TS_DIR/log/net.log"
 # dummy/tun 之类的 default 是代理/VPN 留下的黑洞，不能当上行镜像进 main
 IFACE_RE='^(wlan|eth|rmnet|ccmni|pdp|radio|swlan|ap|clat|v4-)[0-9a-z_]*$'
 
-have_route() {
-  ip -4 route get 1.1.1.1 >/dev/null 2>&1 || ip -6 route get 2001:4860:4860::8888 >/dev/null 2>&1
-}
-# main 里已经留下指向 dummy0 的默认路由时 ip route get 仍会"成功"，但包全进黑洞
-main_is_blackhole() {
-  ip -4 route show table main 2>/dev/null | grep -Eq '^default dev (dummy|tun|tap|utun)'
+# tailscaled 给自己的 socket 打 mark 0x80000，而 Android 的
+#   `ip rule 5210: from all fwmark 0x80000/0xff0000 lookup main`
+# 把它固定到 main 表。所以"有没有路"必须按 main 表判断：
+# 用 `ip route get` 是不带 mark 的查询，会命中别的规则（切网后明明 main 表空的，
+# 它照样返回 via ... table wlan0），于是这里被跳过，daemon 一直
+# `connect: network is unreachable`，控制面连不上，WebUI 状态就永远不更新。
+main_default_dev() {
+  ip -4 route show table main 2>/dev/null \
+    | awk '/^default/{for(i=1;i<=NF;i++) if($i=="dev"){print $(i+1); exit}}'
 }
 
-have_route && ! main_is_blackhole && exit 0
+have_route() {
+  d=$(main_default_dev)
+  [ -z "$d" ] && return 1
+  # 指向 dummy/tun 之类的默认路由等于黑洞，不算有路
+  echo "$d" | grep -Eq "$IFACE_RE" || return 1
+  ip -4 addr show dev "$d" 2>/dev/null | grep -q 'inet '
+}
+
+have_route && exit 0
 
 # $1 = -4 / -6 ; prints "dev gw"
 pick() {
