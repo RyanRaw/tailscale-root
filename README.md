@@ -37,7 +37,7 @@
 | 节点 | 查看所有节点、测延迟 |
 | 安装 | 安装 / 切换 / 重装内置版本；在线安装（指定版本或自定义 URL）；安装自定义二进制（可扫描设备文件） |
 | 日志 | 查看 tailscaled 与登录日志 |
-| 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_TUN`、`TS_EXTRA_ARGS` |
+| 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_TUN`、`TS_EXTRA_ARGS`、`TS_LOGIN_SERVER`、`TS_AUTHKEY`、`TS_UP_ARGS` |
 
 ## 配置
 
@@ -51,7 +51,26 @@ TS_WAKELOCK="1"                    # 持有 CPU 唤醒锁（1 开，0 关）
 TS_TUN="tailscale0"                # TUN 网卡名
 TS_EXTRA_ARGS=""                   # 追加给 tailscaled 的启动参数，如 --netfilter-mode=off
 TS_DAEMON=""                       # 守护进程路径覆盖（留空即 /data/adb/tailscale/bin/tailscaled）
+TS_LOGIN_SERVER=""                 # 自建控制服务器地址，留空即官方（如 https://headscale.example.com）
+TS_AUTHKEY=""                      # 预授权密钥，可免去浏览器登录
+TS_UP_ARGS=""                      # 追加给 tailscale up 的参数，如 --reset
 ```
+
+## 自建控制服务器（Headscale）
+
+支持任何兼容 Tailscale 控制协议的自建服务端（Headscale 等），全程在 WebUI 内配置：
+
+1. 设置页 → **控制服务器** 填 `https://headscale.example.com`（留空即用官方服务器）
+2. 可选：**预授权密钥** 填 Headscale 生成的 pre-auth key，登录时不再需要浏览器授权
+3. 如果这个节点之前在官方服务器上注册过，把 **登录参数** 设为 `--reset`（会清空当前注册信息再重新注册）
+4. 状态页点「获取链接」，在浏览器完成授权；成功后状态变为「已连接」
+
+注意事项：
+
+- 登录失败时状态页会直接显示 `tailscale up` 的原始错误，便于排查地址、证书或网络问题
+- Headscale 使用自签证书时，需先把它的 CA 安装为系统信任的证书，或者换成 Let's Encrypt 签发的域名证书
+- 切换控制服务器后建议在状态页用「重启」让守护进程重新连接；`--reset` 只需要在切换那一次使用
+- DERP 中继默认走官方公共 DERP；如需只用自建 DERP，可在 `TS_EXTRA_ARGS` 中追加相应参数
 
 ## 自建 / 第三方 tailscaled
 
@@ -83,6 +102,7 @@ module/                 # KSU 模块文件（打包发布的内容）
 ├── bins/               # 内置二进制：bins/<arch>/{tailscale,tailscaled,VERSION}
 ├── install_bins.sh     # 部署 / 更新内置二进制
 ├── install_custom.sh   # 安装自建二进制（标记为用户自管）
+├── ts_up.sh            # 按 env 配置登录（支持自建控制服务器 / 预授权密钥）
 ├── service.sh          # 守护进程启动 + 模块描述更新
 ├── action.sh           # KSU 操作按钮：一键启停
 ├── svm_guard.sh        # src_valid_mark 看门狗 + 健康检查

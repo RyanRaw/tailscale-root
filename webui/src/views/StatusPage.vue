@@ -77,6 +77,17 @@
         </div>
       </div>
 
+      <!-- Up / login failure -->
+      <div v-if="upError" class="base-container">
+        <div class="bg-error/10 flex flex-col gap-1 rounded-xl p-4">
+          <div class="text-error text-xs font-semibold tracking-wider uppercase">登录失败</div>
+          <pre class="text-base-content/60 text-xs whitespace-pre-wrap break-all">{{ upError }}</pre>
+          <div class="text-base-content/40 text-xs">
+            切换控制服务器后需在设置页把 TS_UP_ARGS 设为 --reset 重新注册；自签证书需先让系统信任其 CA。
+          </div>
+        </div>
+      </div>
+
       <!-- Account -->
       <div v-if="state.status && isOnline">
         <div class="settings-section-label">账号</div>
@@ -155,7 +166,7 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
-import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR } from '@/composables/useKsu'
+import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -164,6 +175,7 @@ const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
 
 const showPrivacy = ref(false)
+const upError = ref('')
 const uptimeSeconds = ref(0)
 let uptimeTimer: number | undefined
 
@@ -255,11 +267,12 @@ function restartDaemon() {
 }
 function tsUp() {
   act(async () => {
-    await exec(`rm -f ${UP_LOG}; ${BIN} --socket=${SOCK} up --accept-routes --accept-dns=false > ${UP_LOG} 2>&1 &`)
+    upError.value = ''
+    await exec(`rm -f ${UP_LOG}; sh ${MODDIR}/ts_up.sh > ${UP_LOG} 2>&1 &`)
     for (let i = 0; i < 20; i++) {
       await new Promise(r => setTimeout(r, 500))
       const log = await exec(`cat ${UP_LOG} 2>/dev/null`)
-      const m = log.stdout.match(/https:\/\/login\.tailscale\.com\/a\/[a-zA-Z0-9]+/)
+      const m = log.stdout.match(AUTH_URL_RE)
       if (m) {
         state.value.authURL = m[0]
         startLoginPoll()
@@ -268,6 +281,8 @@ function tsUp() {
       await refresh()
       if (isOnline.value) return
     }
+    const tail = await exec(`tail -6 ${UP_LOG} 2>/dev/null`)
+    upError.value = tail.stdout.trim() || '没有拿到登录链接，请检查控制服务器设置与网络'
   })
 }
 function tsDown() {
@@ -300,6 +315,7 @@ function startLoginPoll() {
     await refresh()
     if (isOnline.value) {
       state.value.authURL = ''
+      upError.value = ''
       stopLoginPoll()
     }
   }, 3000) as unknown as number

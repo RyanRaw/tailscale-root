@@ -39,6 +39,10 @@ export const GUARD_PIDFILE = TS_DIR + '/svm_guard.pid'
 export const SVM = '/proc/sys/net/ipv4/conf/all/src_valid_mark'
 export const MODDIR = '/data/adb/modules/tailscale_root'
 
+// tailscale: https://login.tailscale.com/a/xxxx
+// headscale: https://<server>/register/xxxx
+export const AUTH_URL_RE = /https:\/\/[^\s"'<>]*\/(?:a|register)\/[A-Za-z0-9]+/
+
 export interface TailscaleState {
   binInstalled: boolean
   binVersion: string
@@ -110,7 +114,7 @@ export function useKsu() {
         state.value.authURL = state.value.status.AuthURL
       } else if (beNow === 'NeedsLogin' || beNow === 'NoState') {
         const ul = await exec(`test -f ${UP_LOG} && tail -50 ${UP_LOG} || true`)
-        const m = ul.stdout.match(/https:\/\/login\.tailscale\.com\/a\/[a-zA-Z0-9]+/)
+        const m = ul.stdout.match(AUTH_URL_RE)
         state.value.authURL = m ? m[0] : ''
       } else {
         state.value.authURL = ''

@@ -86,6 +86,27 @@
             </div>
             <input v-model="envVars.TS_EXTRA_ARGS" type="text" class="input input-sm w-52" placeholder="如 --netfilter-mode=off" />
           </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
+              控制服务器
+              <span class="text-base-content/30 ml-1 text-xs">TS_LOGIN_SERVER</span>
+            </div>
+            <input v-model="envVars.TS_LOGIN_SERVER" type="text" class="input input-sm w-52" placeholder="留空 = 官方，如 https://headscale.example.com" />
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
+              预授权密钥
+              <span class="text-base-content/30 ml-1 text-xs">TS_AUTHKEY</span>
+            </div>
+            <input v-model="envVars.TS_AUTHKEY" type="text" class="input input-sm w-52" placeholder="可选，免交互登录" />
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
+              登录参数
+              <span class="text-base-content/30 ml-1 text-xs">TS_UP_ARGS</span>
+            </div>
+            <input v-model="envVars.TS_UP_ARGS" type="text" class="input input-sm w-52" placeholder="如 --reset" />
+          </div>
           <div class="setting-item justify-end gap-2">
             <span v-if="saveMessage" class="text-xs" :class="saveError ? 'text-error' : 'text-success'">{{ saveMessage }}</span>
             <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveEnv">
@@ -121,8 +142,12 @@ const saveError = ref(false)
 const envVars = reactive({
   TS_PROXY: '', TS_PORT: '', TS_HOSTNAME: '', TS_WAKELOCK: '',
   TS_TUN: '', TS_EXTRA_ARGS: '',
+  TS_LOGIN_SERVER: '', TS_AUTHKEY: '', TS_UP_ARGS: '',
 })
-const ENV_KEYS = ['TS_PROXY', 'TS_PORT', 'TS_HOSTNAME', 'TS_WAKELOCK', 'TS_TUN', 'TS_EXTRA_ARGS']
+const ENV_KEYS = [
+  'TS_PROXY', 'TS_PORT', 'TS_HOSTNAME', 'TS_WAKELOCK', 'TS_TUN', 'TS_EXTRA_ARGS',
+  'TS_LOGIN_SERVER', 'TS_AUTHKEY', 'TS_UP_ARGS',
+]
 
 const wakelockEnabled = computed({
   get: () => envVars.TS_WAKELOCK === '1' || envVars.TS_WAKELOCK === 'true',
