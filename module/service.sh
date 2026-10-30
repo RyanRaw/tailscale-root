@@ -63,6 +63,8 @@ fi
 if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG" 2>/dev/null || echo 0)" -gt 2097152 ]; then
   mv "$LOG" "$LOG.old"
 fi
+# old builds rolled to .bak; nothing reads or removes those any more
+rm -f "$LOG.bak"
 
 rm -f "$TS_DIR/sock"
 ip link show tailscale0 >/dev/null 2>&1 && ip link del tailscale0 2>/dev/null

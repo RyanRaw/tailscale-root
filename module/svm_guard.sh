@@ -61,7 +61,7 @@ ensure_coloros_guard() {
   setsid inotifyd "$COLOROS_GUARD" /data/misc/net >/dev/null 2>&1 &
 }
 
-fails=0; lastpid=""; grace=0; lastrestart=0; resolv_tick=0; route_tick=0
+fails=0; lastpid=""; grace=0; lastrestart=0; resolv_tick=0; route_tick=0; log_tick=0
 while :; do
   [ "$(cat $SVM 2>/dev/null)" = "1" ] && echo 0 > $SVM
   repair_wifi_default_route
@@ -77,6 +77,19 @@ while :; do
   # keep /etc/resolv.conf in sync with the current network (every ~5 min)
   resolv_tick=$((resolv_tick+1))
   [ $((resolv_tick % 20)) -eq 1 ] && sh "$MODDIR/update_resolv.sh" --quick >/dev/null 2>&1
+
+  # service.sh only rolls tailscaled.log at daemon start, so a long-running
+  # daemon can grow it without bound. Check every ~5 min, and copy-truncate
+  # instead of mv — the daemon holds the fd and would keep writing to the
+  # renamed file.
+  log_tick=$((log_tick+1))
+  if [ $((log_tick % 20)) -eq 1 ]; then
+    log_sz=$(stat -c %s "$TS_DIR/log/tailscaled.log" 2>/dev/null || echo 0)
+    if [ "$log_sz" -gt 2097152 ]; then
+      cp -f "$TS_DIR/log/tailscaled.log" "$TS_DIR/log/tailscaled.log.old" 2>/dev/null \
+        && : > "$TS_DIR/log/tailscaled.log"
+    fi
+  fi
 
   TS_WAKELOCK=1; [ -f "$TS_DIR/env" ] && . "$TS_DIR/env"
 
