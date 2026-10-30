@@ -45,11 +45,23 @@ if [ -n "$INST" ] && [ -z "$MVER" ]; then
 fi
 
 if [ "$MODE" = "--info" ]; then
+  # 不可用时给出原因，让 WebUI 能说清是"这个包没带二进制"还是"架构对不上"
+  REASON=""
+  if [ "$AVAILABLE" != "1" ]; then
+    if [ -z "$ARCH" ]; then
+      REASON="arch"
+    elif [ ! -d "$BUNDLE_DIR/$ARCH" ]; then
+      REASON="missing"
+    else
+      REASON="incomplete"
+    fi
+  fi
   echo "ARCH=$ARCH"
   echo "BUNDLED=$BVER"
   echo "MANAGED=$MVER"
   echo "INSTALLED=$INST"
   echo "AVAILABLE=$AVAILABLE"
+  echo "REASON=$REASON"
   echo "CUSTOM=$CUSTOM"
   echo "CUSTOM_SRC=$CUSTOM_SRC"
   exit 0

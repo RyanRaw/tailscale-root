@@ -25,13 +25,13 @@
             </span>
           </div>
           <div class="setting-item">
-            <div class="setting-item-label">内置版本</div>
+            <div class="setting-item-label">离线包</div>
             <span class="text-sm">
               <template v-if="bundle.available">
                 {{ bundle.version }}
                 <span class="text-base-content/40 text-xs ml-1">{{ bundle.arch }}</span>
               </template>
-              <span v-else class="text-base-content/40">不可用</span>
+              <span v-else class="text-base-content/40">不可用（{{ reasonText }}）</span>
             </span>
           </div>
           <div class="setting-item">
@@ -196,7 +196,16 @@ const latestVersion = ref('')
 const installLog = ref<string[]>([])
 const logContainer = ref<HTMLElement>()
 
-const bundle = ref({ available: false, version: '', arch: '', custom: false, customSrc: '' })
+const bundle = ref({ available: false, version: '', arch: '', reason: '', custom: false, customSrc: '' })
+
+const reasonText = computed(() => {
+  switch (bundle.value.reason) {
+    case 'missing': return '当前安装包不含二进制，刷完整包可恢复'
+    case 'incomplete': return '包内文件不完整'
+    case 'arch': return '架构未知'
+    default: return '当前安装包不含二进制'
+  }
+})
 const customDaemon = ref('')
 const customCli = ref('')
 const candidates = ref<string[]>([])
@@ -225,7 +234,7 @@ const hasUpdate = computed(() => {
 
 const bundleLabel = computed(() => {
   if (installing.value) return '安装中…'
-  if (!bundle.value.available) return '无内置版本'
+  if (!bundle.value.available) return '无离线包'
   if (!state.value.binInstalled) return '安装内置'
   if (bundle.value.version && state.value.binVersion !== bundle.value.version) return '切换到内置'
   return '重装内置'
@@ -254,6 +263,7 @@ const loadBundle = async () => {
     available: kv.AVAILABLE === '1',
     version: kv.BUNDLED || '',
     arch: kv.ARCH || '',
+    reason: kv.REASON || '',
     custom: kv.CUSTOM === '1',
     customSrc: kv.CUSTOM_SRC || '',
   }
@@ -337,6 +347,15 @@ const pollLog = async () => {
     if (last.startsWith('__DONE__')) {
       state.value.binInstalled = false
       refresh()
+      // 在线安装只动 /data/adb/tailscale/bin，模块里的离线包不受影响，
+      // 不重载的话上面那行 "离线包" 会看起来像没生效
+      await loadBundle()
+      if (!bundle.value.available) {
+        installLog.value = [
+          ...lines,
+          '提示：离线包仍不可用——在线安装只更新运行目录，刷完整包才会补回 bins。',
+        ]
+      }
     }
   }
 }
