@@ -193,7 +193,7 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
-import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR, AUTH_URL_RE } from '@/composables/useKsu'
+import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -346,20 +346,16 @@ function tsLogout() {
 const diag = ref('')
 const diagBusy = ref(false)
 
-const DIAG_CMD = [
-  'echo "== route get 1.1.1.1 =="',
-  'ip route get 1.1.1.1 2>&1 | head -2',
-  'echo "== default routes =="',
-  'ip route show table all 2>/dev/null | grep "^default" | head -5',
-  'echo "== main table =="',
-  'ip route show table main 2>&1 | head -5',
-  'echo "== /etc/resolv.conf =="',
-  'cat /etc/resolv.conf 2>&1 | head -5',
-  'echo "== dns props =="',
-  'for p in net.dns1 net.dns2 net.dns3; do echo "$p=$(getprop $p)"; done',
-  'echo "== ping 223.5.5.5 =="',
-  'ping -c 1 -W 2 223.5.5.5 2>&1 | tail -2',
-].join('; ')
+const DIAG_CMD = `
+echo "== route get v4 =="; ip -4 route get 1.1.1.1 2>&1 | head -2
+echo "== route get v6 =="; ip -6 route get 2001:4860:4860::8888 2>&1 | head -2
+echo "== default routes =="; ip -4 route show table all 2>/dev/null | grep "^default" | head -4; ip -6 route show table all 2>/dev/null | grep "^default" | head -4
+echo "== main table =="; ip -4 route show table main 2>&1 | head -4
+echo "== /etc/resolv.conf =="; cat /etc/resolv.conf 2>&1 | head -5
+echo "== dns props =="; for p in net.dns1 net.dns2 net.dns3; do echo "$p=$(getprop $p)"; done
+echo "== curl api.github.com =="; curl -s -o /dev/null -w "%{http_code}" --max-time 6 https://api.github.com 2>&1; echo
+echo "== curl login server =="; srv=$(grep "^TS_LOGIN_SERVER=" ${TS_DIR}/env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'); if [ -n "$srv" ]; then curl -s -o /dev/null -w "%{http_code}" --max-time 6 "$srv" 2>&1; echo; else echo "(未设置)"; fi
+`.trim()
 
 async function runDiag() {
   if (diagBusy.value) return
