@@ -10,6 +10,7 @@
 TS_DIR=/data/adb/tailscale
 MODDIR=/data/adb/modules/tailscale_root
 TARGET="$MODDIR/system/etc/resolv.conf"
+OWN_CONF="$TS_DIR/resolv.conf"
 LOG="$TS_DIR/log/resolv.log"
 QUICK="$1"
 
@@ -19,12 +20,26 @@ TS_DNS=""
 
 servers=""
 
+# 本机地址不能当上游（dumpsys 里会带上 wlan0/rmnet 的自身 IP，写进去等于死循环）
+LOCAL_IPS=$(
+  ip -o -4 addr show 2>/dev/null | awk '{print $4}' | cut -d/ -f1
+  ip -o -6 addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1
+)
+
+is_local() {
+  for l in $LOCAL_IPS; do
+    [ "$l" = "$1" ] && return 0
+  done
+  return 1
+}
+
 add_server() {
   s="$1"
   [ -z "$s" ] && return 0
   case "$s" in *[!0-9a-fA-F:.]*) return 0 ;; esac
   case "$s" in *.*|*:*) ;; *) return 0 ;; esac
   case " $servers " in *" $s "*) return 0 ;; esac
+  is_local "$s" && return 0
   servers="$servers $s"
 }
 
@@ -58,11 +73,8 @@ write_conf() {
 mkdir -p "${TARGET%/*}" 2>/dev/null
 write_conf "$TARGET"
 
-# 叠加没生效 / 模块目录不可写时，直接尝试合并后的路径
-if [ ! -s "$TARGET" ]; then
-  TARGET=/system/etc/resolv.conf
-  write_conf "$TARGET"
-fi
+# 模块自查/调试用的一份（system/etc 叠加在部分 ROM 上不生效）
+write_conf "$OWN_CONF"
 
-[ -s "$TARGET" ] && echo "$(date '+%F %T') [$QUICK] -> $servers" >> "$LOG" 2>/dev/null
+[ -s "$OWN_CONF" ] && echo "$(date '+%F %T') [$QUICK] -> $servers" >> "$LOG" 2>/dev/null
 exit 0

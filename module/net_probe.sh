@@ -47,6 +47,9 @@ ts_state() {
   ip -o -4 addr show 2>/dev/null | awk '{print $2, $4}' | head -8
   echo "-- resolv.conf --"
   cat /etc/resolv.conf 2>&1 | head -5
+  echo "-- tsdns --"
+  tsdns_pid=$(pgrep -f "$TS_DIR/bin/tsdns" | head -1)
+  echo "pid=${tsdns_pid:-none} upstream=$(tail -n 1 "$TS_DIR/log/tsdns.log" 2>/dev/null | grep -o 'upstream=.*' )"
   echo "-- dns prop --"
   echo "net.dns1=$(getprop net.dns1) net.dns2=$(getprop net.dns2)"
   echo "-- daemon --"

@@ -96,6 +96,10 @@ VERBOSE_ARG=""
 # one network snapshot per daemon start
 sh "$MODDIR/net_probe.sh" now >/dev/null 2>&1
 
+# 静态 Go 二进制只认 /etc/resolv.conf；Android 上它不存在时 Go 会退回
+# 127.0.0.1:53，先把这个地址上的本地转发器拉起来再启动守护进程。
+sh "$MODDIR/tsdns_start.sh" >/dev/null 2>&1
+
 HTTPS_PROXY="$TS_PROXY" \
 HTTP_PROXY="$TS_PROXY" \
 nohup "$TS_DAEMON" \

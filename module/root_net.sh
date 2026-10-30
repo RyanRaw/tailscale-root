@@ -9,23 +9,32 @@
 TS_DIR=/data/adb/tailscale
 LOG="$TS_DIR/log/net.log"
 
-IFACE_RE='^(wlan|eth|rmnet|ccmni|pdp|radio|swlan|ap|clat|v4-|dummy)[0-9a-z_]*$'
+# dummy/tun 之类的 default 是代理/VPN 留下的黑洞，不能当上行镜像进 main
+IFACE_RE='^(wlan|eth|rmnet|ccmni|pdp|radio|swlan|ap|clat|v4-)[0-9a-z_]*$'
 
 have_route() {
   ip -4 route get 1.1.1.1 >/dev/null 2>&1 || ip -6 route get 2001:4860:4860::8888 >/dev/null 2>&1
 }
-have_route && exit 0
+# main 里已经留下指向 dummy0 的默认路由时 ip route get 仍会"成功"，但包全进黑洞
+main_is_blackhole() {
+  ip -4 route show table main 2>/dev/null | grep -Eq '^default dev (dummy|tun|tap|utun)'
+}
+
+have_route && ! main_is_blackhole && exit 0
 
 # $1 = -4 / -6 ; prints "dev gw"
 pick() {
-  ip "$1" route show table all 2>/dev/null | awk -v re="$IFACE_RE" '
+  ip "$1" route show table all 2>/dev/null | awk -v re="$IFACE_RE" -v fam="$1" '
     /^default/ {
       dev=""; gw="";
       for (i=1;i<=NF;i++) {
         if ($i=="via") gw=$(i+1);
         if ($i=="dev") dev=$(i+1);
       }
-      if (dev != "" && dev ~ re) { print dev, gw; exit }
+      if (dev == "" || dev !~ re) next
+      # IPv4 没有网关的 default 只可能是虚拟接口，不是真上行
+      if (fam == "-4" && gw == "") next
+      print dev, gw; exit
     }'
 }
 
@@ -35,6 +44,8 @@ apply() {
   set -- $line
   dev="$1"; gw="$2"
   [ -n "$dev" ] || return 0
+  # 该接口必须真的承载地址，否则写进 main 只会把 root 流量打进黑洞
+  ip "$fam" addr show dev "$dev" 2>/dev/null | grep -q 'inet' || return 0
   if [ -n "$gw" ]; then
     ip "$fam" route replace default via "$gw" dev "$dev" table main 2>/dev/null && return 0
     ip "$fam" route del default table main 2>/dev/null

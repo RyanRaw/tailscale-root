@@ -107,5 +107,18 @@ if [ "$NEED" = "1" ]; then
   rm -f "$BIN_DIR/.custom"
 fi
 
+# tsdns：本地 DNS 转发器。静态 tailscaled 在 Android 上唯一的解析途径
+# （/etc/resolv.conf 缺失时 Go 退回 127.0.0.1:53），独立于上面的版本升级逻辑。
+if [ -f "$SRC/tsdns" ] && ! cmp -s "$SRC/tsdns" "$BIN_DIR/tsdns" 2>/dev/null; then
+  mkdir -p "$BIN_DIR"
+  if cp -f "$SRC/tsdns" "$BIN_DIR/tsdns.new"; then
+    chmod 755 "$BIN_DIR/tsdns.new"
+    mv -f "$BIN_DIR/tsdns.new" "$BIN_DIR/tsdns"
+    echo "已部署 tsdns"
+  else
+    rm -f "$BIN_DIR/tsdns.new"
+  fi
+fi
+
 VER=$("$BIN_DIR/tailscale" --version 2>/dev/null | head -1)
 echo "✓ 当前二进制: ${VER:-$BVER}"
