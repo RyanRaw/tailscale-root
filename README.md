@@ -55,6 +55,8 @@ TS_LOGIN_SERVER=""                 # 自建控制服务器地址，留空即官�
 TS_AUTHKEY=""                      # 预授权密钥，可免去浏览器登录
 TS_UP_ARGS=""                      # 追加给 tailscale up 的参数，如 --reset
 TS_DNS=""                          # 自定义 DNS，留空自动（如 "223.5.5.5 1.1.1.1"）
+TS_DNS_UPSTREAM="223.5.5.5:53,119.29.29.29:53"  # 内置回环转发器的上游 DNS
+TS_DNS_DISABLE=0                   # 置 1 关闭内置回环 DNS 转发器（tsdns）
 TS_LOGLEVEL="normal"               # 日志级别：quiet / normal / debug（debug 开启 tailscaled 详细日志）
 ```
 
@@ -122,17 +124,19 @@ failed to resolve "xxx": no DNS fallback candidates remain for "xxx"
 ```
 
 原因：Android 没有 `/etc/resolv.conf`。官方 APP 走的是系统 netd 解析，而本模块的 `tailscaled`
-是**静态 Go 二进制**，只能用 `/etc/resolv.conf`（缺失时只剩内置的公共 DNS 兜底，在国内基本全被墙）。
-于是只有「解析控制服务器」这一步失败，其它 App 完全正常。
+是**静态 Go 二进制**（无 cgo），只能读 `/etc/resolv.conf`；文件缺失时 Go 会退回内置的
+`defaultNS = 127.0.0.1:53`。于是只有「解析控制服务器」这一步失败，其它 App 完全正常。
 
-处理：本版模块会把 `system/etc/resolv.conf` 叠加到 `/system`（即 `/etc`），并在启动、以及每 5 分钟
-用设备当前的 DNS 刷新它：
+处理：模块随包带了一个 `tsdns`（约 2.4MB 的回环 DNS 转发器），只监听 `127.0.0.1`，把查询转发到
+`TS_DNS_UPSTREAM`（默认 `223.5.5.5`、`119.29.29.29`）。它只服务于 tailscaled，**不劫持系统 DNS、
+不写 `/system`、不影响其它 App**：
 
-1. 升级模块后重启一次；或
-2. 直接在 WebUI 设置页点 **tailscaled DNS → 刷新**（立即生效，无需重启）
-3. 若自动探测到的 DNS 仍不可用，在设置页 **自定义 DNS**（`TS_DNS`）里手工填，如 `223.5.5.5 119.29.29.29`
+- 端口已被别的程序占用时直接让位，不抢占（日志里是 `127.0.0.1:53 already in use, skip`）
+- tailscaled 停止后看门狗会把它一起收掉，端口随即释放
+- 不想用：`TS_DNS_DISABLE=1`；换上游：`TS_DNS_UPSTREAM="1.1.1.1:53,8.8.8.8:53"`
+- 系统本身有 `/etc/resolv.conf` 时（Magisk 一类能叠加新文件的 ROM），tsdns 不会启动
 
-刷新后回到状态页点「获取链接」重新发起登录。
+改完 `env` 后重启一次 tailscaled，再回状态页点「获取链接」重新发起登录。
 
 ### 报 `connect: network is unreachable`
 

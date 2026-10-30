@@ -85,6 +85,8 @@ while :; do
     fi
   else
     echo $WL > /sys/power/wake_unlock 2>/dev/null
+    # 守护进程不在就不要继续占着回环 53，把端口还给别的程序
+    pkill -x tsdns 2>/dev/null
   fi
 
   if [ -n "$pid" ] && [ -S "$TS_DIR/sock" ]; then
