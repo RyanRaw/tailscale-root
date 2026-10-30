@@ -28,7 +28,7 @@
             :class="isOnline ? 'bg-success animate-pulse' : state.daemonRunning ? 'bg-warning' : 'bg-error'"
           />
           <div class="flex flex-col">
-            <span class="text-xl font-bold">
+            <span class="text-base font-bold">
               {{ heroLabel }}
             </span>
             <span
@@ -139,6 +139,28 @@
             <div class="setting-item-label">版本</div>
             <span class="text-sm">{{ state.binVersion }}</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Network diagnostics -->
+      <div>
+        <div class="settings-section-label flex items-center">
+          <span class="flex-1">网络诊断</span>
+          <button class="btn btn-ghost btn-xs" :disabled="diagBusy" @click="runDiag">
+            {{ diagBusy ? '检测中…' : '运行' }}
+          </button>
+          <button class="btn btn-ghost btn-xs text-primary" :disabled="diagBusy" @click="fixNet">
+            修复
+          </button>
+        </div>
+        <div class="settings-grid">
+          <div v-if="!diag" class="setting-item justify-center">
+            <span class="text-base-content/40 text-sm py-2">点「运行」检查 root 出网与 DNS 状态</span>
+          </div>
+          <pre
+            v-else
+            class="text-[11px] leading-4 whitespace-pre-wrap break-all max-h-72 overflow-auto px-3 py-2"
+          >{{ diag }}</pre>
         </div>
       </div>
 
@@ -321,6 +343,46 @@ function tsLogout() {
     await new Promise(r => setTimeout(r, 1500))
   })
 }
+const diag = ref('')
+const diagBusy = ref(false)
+
+const DIAG_CMD = [
+  'echo "== route get 1.1.1.1 =="',
+  'ip route get 1.1.1.1 2>&1 | head -2',
+  'echo "== default routes =="',
+  'ip route show table all 2>/dev/null | grep "^default" | head -5',
+  'echo "== main table =="',
+  'ip route show table main 2>&1 | head -5',
+  'echo "== /etc/resolv.conf =="',
+  'cat /etc/resolv.conf 2>&1 | head -5',
+  'echo "== dns props =="',
+  'for p in net.dns1 net.dns2 net.dns3; do echo "$p=$(getprop $p)"; done',
+  'echo "== ping 223.5.5.5 =="',
+  'ping -c 1 -W 2 223.5.5.5 2>&1 | tail -2',
+].join('; ')
+
+async function runDiag() {
+  if (diagBusy.value) return
+  diagBusy.value = true
+  try {
+    const r = await exec(DIAG_CMD)
+    diag.value = (r.stdout + r.stderr).trim()
+  } finally {
+    diagBusy.value = false
+  }
+}
+
+async function fixNet() {
+  if (diagBusy.value) return
+  diagBusy.value = true
+  try {
+    await exec(`sh ${MODDIR}/root_net.sh; sh ${MODDIR}/update_resolv.sh`)
+  } finally {
+    diagBusy.value = false
+  }
+  await runDiag()
+}
+
 function fixSvm() {
   act(async () => { await exec(`echo 0 > ${SVM}`) })
 }

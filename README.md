@@ -117,6 +117,22 @@ failed to resolve "xxx": no DNS fallback candidates remain for "xxx"
 
 刷新后回到状态页点「获取链接」重新发起登录。
 
+### 报 `connect: network is unreachable`
+
+```
+bootstrapDNS("derp9.tailscale.com", "207.148.3.137") ... dial tcp 207.148.3.137:443: connect: network is unreachable
+```
+
+原因：Android 的默认路由放在「按网络」的路由表里，靠 socket 的 fwmark 选中；App 由 netd 打标记，
+而 **root（uid 0）的流量不带标记，只能查 main 表**，main 表通常是空的 → 所有外连都返回 ENETUNREACH，
+DNS 兜底（bootstrap-dns）随之全灭。
+
+处理：模块会把当前默认网络的默认路由镜像到 main 表（只影响 root，不影响 App），启动时执行一次，
+看门狗每 15 秒自检一次；也可以点状态页「网络诊断」里的 **修复** 立即执行。
+
+状态页「网络诊断」可以一键查看：`ip route get 1.1.1.1`、现有默认路由、main 表、`/etc/resolv.conf`、
+DNS 系统属性、以及 ping 测试结果，排查时把这段输出发出来即可。
+
 ### 其它常见问题
 
 - **切换控制服务器后登录报错**：设置页把 `TS_UP_ARGS` 设为 `--reset` 再登录一次（只需一次）

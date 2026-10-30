@@ -74,6 +74,10 @@ ip link show tailscale0 >/dev/null 2>&1 && ip link del tailscale0 2>/dev/null
 # the control server / DERP host names actually resolve.
 sh "$MODDIR/update_resolv.sh" >/dev/null 2>&1
 
+# Root traffic has no fwmark, so it only sees the (usually empty) main routing
+# table -> "connect: network is unreachable". Mirror the default route.
+sh "$MODDIR/root_net.sh" >/dev/null 2>&1
+
 H="$TS_HOSTNAME"
 if [ -z "$H" ]; then
   DEVNAME=$(settings get global device_name 2>/dev/null)
