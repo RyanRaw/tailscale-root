@@ -28,15 +28,22 @@ DEV="$1"
 GW="$2"
 [ -n "$DEV" ] || exit 0
 
-if [ -n "$GW" ]; then
-  ip route replace default via "$GW" dev "$DEV" table main 2>/dev/null
-else
-  ip route replace default dev "$DEV" table main 2>/dev/null
-fi
+add_route() {
+  if [ -n "$GW" ]; then
+    ip route replace default via "$GW" dev "$DEV" table main 2>/dev/null && return 0
+    ip route del default table main 2>/dev/null
+    ip route add default via "$GW" dev "$DEV" table main 2>&1
+  else
+    ip route replace default dev "$DEV" table main 2>/dev/null && return 0
+    ip route del default table main 2>/dev/null
+    ip route add default dev "$DEV" table main 2>&1
+  fi
+}
 
+err=$(add_route)
 if ip route get 1.1.1.1 >/dev/null 2>&1; then
   echo "$(date '+%F %T') root route -> $DEV ${GW:+via $GW} (table main)" >> "$LOG"
 else
-  echo "$(date '+%F %T') root route failed for $DEV ${GW:+via $GW}" >> "$LOG"
+  echo "$(date '+%F %T') root route failed for $DEV ${GW:+via $GW}: $err" >> "$LOG"
 fi
 exit 0
