@@ -33,11 +33,11 @@
 
 | 页面 | 能做什么 |
 | --- | --- |
-| 状态 | 查看连接状态 / 账号 / 节点数；启动、停止、重启守护进程；获取登录链接；断开、登出；修复 `src_valid_mark`、启停守卫 |
+| 状态 | 查看连接状态 / 账号 / 节点数；启动、停止、重启守护进程；获取登录链接；断开、登出；网络诊断快照；Box Guard 状态 |
 | 节点 | 查看所有节点、测延迟 |
 | 安装 | 安装 / 切换 / 重装内置版本；在线安装（指定版本或自定义 URL）；安装自定义二进制（可扫描设备文件） |
-| 日志 | 查看 tailscaled 与登录日志 |
-| 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_TUN`、`TS_EXTRA_ARGS`、`TS_LOGIN_SERVER`、`TS_AUTHKEY`、`TS_UP_ARGS` |
+| 日志 | 6 类来源（守护进程 / 网络诊断 / 登录 / 看门狗 / DNS / 二进制部署）；跟随刷新、清空当前日志 |
+| 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_ROUTE_GUARD`、`TS_TUN`、`TS_EXTRA_ARGS`、`TS_LOGIN_SERVER`、`TS_AUTHKEY`、`TS_UP_ARGS`、`TS_DNS`、`TS_LOGLEVEL` |
 
 ## 配置
 
@@ -48,6 +48,7 @@ TS_PROXY="http://127.0.0.1:7890"  # 控制面 / DERP 使用的 HTTP 代理
 TS_PORT="41641"                    # WireGuard 监听端口
 TS_HOSTNAME="my-phone"             # 覆盖自动获取的主机名
 TS_WAKELOCK="1"                    # 持有 CPU 唤醒锁（1 开，0 关）
+TS_ROUTE_GUARD="1"                 # 子网重叠时自动关 accept-routes（1 开，0 关）
 TS_TUN="tailscale0"                # TUN 网卡名
 TS_EXTRA_ARGS=""                   # 追加给 tailscaled 的启动参数，如 --netfilter-mode=off
 TS_DAEMON=""                       # 守护进程路径覆盖（留空即 /data/adb/tailscale/bin/tailscaled）
@@ -83,11 +84,14 @@ TS_LOGLEVEL="normal"               # 日志级别：quiet / normal / debug（deb
 
 设置页的「日志级别」控制排障强度：
 
-| 级别 | tailscaled | 网络快照 `log/net_probe.log` |
+| 级别 | `log/tailscaled.log` | 网络快照 `log/net_probe.log` |
 | --- | --- | --- |
-| 静默 quiet | 常规 | 不自动采集（只能手动抓取） |
+| 静默 quiet | 不记录（输出丢弃到 `/dev/null`） | 不自动采集（只能手动抓取） |
 | 标准 normal | 常规 | 每 5 分钟一条 |
 | 调试 debug | 追加 `--verbose=2` 详细日志 | 每 60 秒一条 |
+
+日志都有上限：`tailscaled.log` 超过 2 MB、`net_probe.log` 超过 512 KB 时会自动滚一代（`.old`），
+运行时也会检查，不需要重启守护进程。
 
 `log/net_probe.log` 每条记录包含：`route get`（v4/v6）、全部默认路由、main 表、网卡 IPv4、`/etc/resolv.conf`、
 `net.dns1/2`、守护进程 pid 与 BackendState、`curl` 直连 GitHub 与登录服务器的返回码和时间、以及 tailscaled 最近的报错。
@@ -171,7 +175,7 @@ bootstrapDNS("derp9.tailscale.com", "207.148.3.137") ... dial tcp 207.148.3.137:
 DNS 兜底（bootstrap-dns）随之全灭。
 
 处理：模块会把当前默认网络的默认路由镜像到 main 表（只影响 root，不影响 App），启动时执行一次，
-看门狗每 15 秒自检一次；也可以点状态页「网络诊断」里的 **修复** 立即执行。
+之后由看门狗每 30 秒自检并自动补回，不需要手动干预。
 
 状态页「网络诊断」可以一键查看：`ip route get 1.1.1.1`、现有默认路由、main 表、`/etc/resolv.conf`、
 DNS 系统属性、以及 ping 测试结果，排查时把这段输出发出来即可。
