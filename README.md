@@ -20,6 +20,13 @@
 - **唤醒锁**：可选的 CPU 唤醒锁，避免深度睡眠后数据面卡死
 - **一键开关**：KSU 管理器的操作按钮可启动 / 停止
 
+<p align="center">
+  <img src="docs/screenshots/status.jpg" width="23%" alt="状态页">
+  <img src="docs/screenshots/peers.jpg" width="23%" alt="节点页">
+  <img src="docs/screenshots/install.jpg" width="23%" alt="安装页">
+  <img src="docs/screenshots/settings.jpg" width="23%" alt="设置页">
+</p>
+
 ## 安装
 
 1. 下载最新 [release](https://github.com/RyanRaw/tailscale-root/releases) 的 zip
