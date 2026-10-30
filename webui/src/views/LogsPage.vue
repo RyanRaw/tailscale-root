@@ -21,7 +21,8 @@
         </button>
         <button
           class="btn btn-ghost btn-sm btn-circle"
-          @click="logs = []"
+          :disabled="loadingLogs"
+          @click="clearLog"
         >
           <TrashIcon class="h-4 w-4" />
         </button>
@@ -74,6 +75,7 @@
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { exec, TS_DIR } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
+import { showNotification } from '@/helper/notification'
 import { ArrowPathIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
@@ -135,6 +137,20 @@ const loadLogs = async () => {
     const parsed = res.stdout.split('\n').map(parseLine).filter(Boolean) as LogEntry[]
     parsed.forEach((e, i) => { (e as any).seq = i + 1 })
     logs.value = parsed.reverse()
+  } finally {
+    loadingLogs.value = false
+  }
+}
+
+async function clearLog() {
+  if (loadingLogs.value) return
+  loadingLogs.value = true
+  try {
+    // 截断而不是 rm：tailscaled 长期持有这个 fd，删掉文件它只会继续往已删除的
+    // inode 里写，日志页再也读不到（直到重启才重建）。截断后它从 0 接着写。
+    await exec(`: > ${logPath.value} 2>/dev/null; true`)
+    logs.value = []
+    showNotification({ content: '已清空当前日志', type: 'alert-success', timeout: 2000 })
   } finally {
     loadingLogs.value = false
   }
