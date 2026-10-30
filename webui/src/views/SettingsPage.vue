@@ -132,18 +132,6 @@
             </div>
             <input v-model="envVars.TS_DNS" type="text" class="input input-sm w-52" placeholder="留空自动，如 223.5.5.5 1.1.1.1" />
           </div>
-          <div class="setting-item">
-            <div class="setting-item-label">
-              tailscaled DNS
-              <span class="text-base-content/30 ml-1 text-xs">/etc/resolv.conf</span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-base-content/60 text-xs tabular-nums">{{ dnsSummary || '未配置' }}</span>
-              <button class="btn btn-ghost btn-xs" :disabled="dnsRefreshing" @click="refreshDns">
-                {{ dnsRefreshing ? '刷新中…' : '刷新' }}
-              </button>
-            </div>
-          </div>
           <div class="setting-item justify-end gap-2">
             <span v-if="saveMessage" class="text-xs" :class="saveError ? 'text-error' : 'text-success'">{{ saveMessage }}</span>
             <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveEnv">
@@ -165,7 +153,6 @@ import { autoTheme, darkTheme, defaultTheme } from '@/store/settings'
 import { ALL_THEME } from '@/constant'
 import { ArrowPathIcon } from '@heroicons/vue/24/outline'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const TS_ENV_FILE = '/data/adb/tailscale/env'
@@ -188,25 +175,6 @@ const ENV_KEYS = [
   'TS_LOGLEVEL', 'TS_LOGIN_SERVER', 'TS_AUTHKEY', 'TS_UP_ARGS', 'TS_DNS',
   'TS_ROUTE_GUARD',
 ]
-
-const dnsSummary = ref('')
-const dnsRefreshing = ref(false)
-
-const loadDns = async () => {
-  const r = await exec("grep '^nameserver' /etc/resolv.conf 2>/dev/null | awk '{print $2}' | tr '\\n' ' '")
-  dnsSummary.value = r.stdout.trim()
-}
-
-const refreshDns = async () => {
-  if (dnsRefreshing.value) return
-  dnsRefreshing.value = true
-  try {
-    await exec(`sh ${MODDIR}/update_resolv.sh 2>&1`)
-    await loadDns()
-  } finally {
-    dnsRefreshing.value = false
-  }
-}
 
 const wakelockEnabled = computed({
   get: () => envVars.TS_WAKELOCK === '1' || envVars.TS_WAKELOCK === 'true',
@@ -263,15 +231,20 @@ const saveEnv = async () => {
     const content = newLines.join('\\n')
     const w = await exec(`printf '${content}\\n' > ${TS_ENV_FILE}`)
     if (w.errno !== 0) { saveMessage.value = '保存失败'; saveError.value = true }
-    else if (envVars.TS_AUTHKEY || envVars.TS_LOGIN_SERVER) {
-      saveMessage.value = '已保存，到状态页重新登录后生效'
+    else {
+      // 立刻按新配置重写 resolv.conf。清空 TS_DNS 时 --quick 在网络没变的情况下
+      // 会直接退出，不跑这一次就会一直留着旧值。
+      await exec(`sh ${MODDIR}/update_resolv.sh 2>&1`)
+      if (envVars.TS_AUTHKEY || envVars.TS_LOGIN_SERVER) {
+        saveMessage.value = '已保存，到状态页重新登录后生效'
+      } else {
+        saveMessage.value = '已保存'
+      }
     }
-    else { saveMessage.value = '已保存' }
   } catch (e) { saveMessage.value = '错误'; saveError.value = true }
   finally { saving.value = false }
 }
 
-onMounted(() => { loadEnv(); loadDns() })
-// 表单可能正有未保存的编辑，切回时不整份重载 env，只刷只读的 DNS 摘要
-useAutoRefresh(loadDns)
+// 切回本页不重载 env：表单可能正有未保存的编辑，整份刷新会静默冲掉
+onMounted(() => { loadEnv() })
 </script>
