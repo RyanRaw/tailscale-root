@@ -83,6 +83,17 @@
 .toggle {
   @apply border-base-border transition-all duration-200 ease-out;
 }
+/* 暗色主题下 base-content 是亮色，8% 混出的描边几乎看不见，未选中的开关
+   会和背景糊在一起。light-dark() 跟随主题自带的 color-scheme，暗色时补一层
+   更亮的描边；不支持该函数的浏览器回落到上面的 base-border。 */
+[data-theme] .checkbox,
+[data-theme] .radio,
+[data-theme] .toggle {
+  border-color: light-dark(
+    var(--color-base-border),
+    color-mix(in srgb, var(--color-base-content) 34%, transparent)
+  );
+}
 .checkbox:focus-visible,
 .radio:focus-visible,
 .toggle:focus-visible {
