@@ -19,6 +19,22 @@ MARK=$TS_DIR/.accept_routes_auto
 
 [ -S "$SOCK" ] || exit 0
 
+# 开关：默认开启（只有显式写 0 才关闭）
+TS_ROUTE_GUARD=1
+[ -f "$TS_DIR/env" ] && . "$TS_DIR/env"
+
+if [ "$TS_ROUTE_GUARD" = "0" ]; then
+  # 关掉自动避让时把之前自动关掉的 accept-routes 还原，
+  # 否则会一直停留在 false，访问不了对端子网。
+  if [ -f "$MARK" ]; then
+    if "$TS" --socket="$SOCK" set --accept-routes=true >/dev/null 2>&1; then
+      echo "$(date '+%F %T') route guard disabled -> accept-routes=true" >>"$LOG"
+      rm -f "$MARK"
+    fi
+  fi
+  exit 0
+fi
+
 status=$("$TS" --socket="$SOCK" status --json 2>/dev/null) || exit 0
 [ -n "$status" ] || exit 0
 

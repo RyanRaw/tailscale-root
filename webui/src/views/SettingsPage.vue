@@ -74,6 +74,13 @@
           </div>
           <div class="setting-item">
             <div class="setting-item-label">
+              自动避开子网冲突
+              <span class="text-base-content/30 ml-1 text-xs">TS_ROUTE_GUARD</span>
+            </div>
+            <input v-model="routeGuardEnabled" type="checkbox" class="toggle toggle-sm" />
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
               监听网卡
               <span class="text-base-content/30 ml-1 text-xs">TS_TUN</span>
             </div>
@@ -173,10 +180,12 @@ const envVars = reactive({
   TS_PROXY: '', TS_PORT: '', TS_HOSTNAME: '', TS_WAKELOCK: '',
   TS_TUN: '', TS_EXTRA_ARGS: '', TS_LOGLEVEL: '',
   TS_LOGIN_SERVER: '', TS_AUTHKEY: '', TS_UP_ARGS: '', TS_DNS: '',
+  TS_ROUTE_GUARD: '',
 })
 const ENV_KEYS = [
   'TS_PROXY', 'TS_PORT', 'TS_HOSTNAME', 'TS_WAKELOCK', 'TS_TUN', 'TS_EXTRA_ARGS',
   'TS_LOGLEVEL', 'TS_LOGIN_SERVER', 'TS_AUTHKEY', 'TS_UP_ARGS', 'TS_DNS',
+  'TS_ROUTE_GUARD',
 ]
 
 const dnsSummary = ref('')
@@ -201,6 +210,12 @@ const refreshDns = async () => {
 const wakelockEnabled = computed({
   get: () => envVars.TS_WAKELOCK === '1' || envVars.TS_WAKELOCK === 'true',
   set: (val: boolean) => { envVars.TS_WAKELOCK = val ? '1' : '0' },
+})
+
+// 默认开启：只有显式写 0 才关闭
+const routeGuardEnabled = computed({
+  get: () => envVars.TS_ROUTE_GUARD !== '0',
+  set: (val: boolean) => { envVars.TS_ROUTE_GUARD = val ? '1' : '0' },
 })
 
 const loadEnv = async () => {
