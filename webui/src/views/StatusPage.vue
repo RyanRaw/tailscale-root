@@ -191,6 +191,7 @@
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -402,11 +403,9 @@ onMounted(() => {
     if (state.value.daemonRunning) uptimeSeconds.value++
   }, 1000) as unknown as number
 })
-onActivated(() => {
-  loadAuthKey()
-  refresh()
-  startPoll()
-})
+// 切回本页时重拉一次；首次激活由上面的 onMounted 负责，这里不会重复
+useAutoRefresh(() => { loadAuthKey(); refresh() })
+onActivated(() => { startPoll() })
 onDeactivated(() => {
   stopPoll()
 })

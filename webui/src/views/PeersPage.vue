@@ -141,6 +141,7 @@ import { useKsu, BIN, SOCK } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { ArrowPathIcon, SignalIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onMounted, ref } from 'vue'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
@@ -263,4 +264,5 @@ async function runPing() {
 }
 
 onMounted(() => { refresh() })
+useAutoRefresh(refresh)
 </script>

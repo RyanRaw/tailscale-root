@@ -165,6 +165,7 @@ import { autoTheme, darkTheme, defaultTheme } from '@/store/settings'
 import { ALL_THEME } from '@/constant'
 import { ArrowPathIcon } from '@heroicons/vue/24/outline'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const TS_ENV_FILE = '/data/adb/tailscale/env'
@@ -271,4 +272,6 @@ const saveEnv = async () => {
 }
 
 onMounted(() => { loadEnv(); loadDns() })
+// 表单可能正有未保存的编辑，切回时不整份重载 env，只刷只读的 DNS 摘要
+useAutoRefresh(loadDns)
 </script>

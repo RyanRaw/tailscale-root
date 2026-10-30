@@ -75,7 +75,8 @@ import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { exec, TS_DIR } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { ArrowPathIcon, TrashIcon } from '@heroicons/vue/24/outline'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 
@@ -149,14 +150,25 @@ const followTick = async () => {
   }
 }
 
-watch(follow, (val) => {
-  if (val) followTimer = setInterval(followTick, 3000) as unknown as number
-  else if (followTimer) { clearInterval(followTimer); followTimer = undefined }
-})
+function startFollow() {
+  if (!follow.value || followTimer) return
+  followTimer = setInterval(followTick, 3000) as unknown as number
+}
+function stopFollow() {
+  if (!followTimer) return
+  clearInterval(followTimer)
+  followTimer = undefined
+}
+
+watch(follow, (val) => { if (val) startFollow(); else stopFollow() })
 
 onMounted(() => {
   loadLogs()
-  if (follow.value) followTimer = setInterval(followTick, 3000) as unknown as number
+  startFollow()
 })
-onUnmounted(() => { if (followTimer) clearInterval(followTimer) })
+// 页面被 KeepAlive 缓存时定时器不会自己停，切走就关掉，省点开销
+onActivated(() => { startFollow() })
+onDeactivated(() => { stopFollow() })
+onUnmounted(() => { stopFollow() })
+useAutoRefresh(loadLogs)
 </script>

@@ -183,6 +183,7 @@ import { useKsu, TS_DIR, MODDIR, PIDFILE } from '@/composables/useKsu'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
@@ -404,4 +405,6 @@ onMounted(() => {
   refresh()
   checkLatest()
 })
+// 只重读安装状态；checkLatest 要发网络请求，留给手动刷新
+useAutoRefresh(refresh)
 </script>
