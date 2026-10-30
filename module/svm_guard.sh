@@ -61,7 +61,7 @@ ensure_coloros_guard() {
   setsid inotifyd "$COLOROS_GUARD" /data/misc/net >/dev/null 2>&1 &
 }
 
-fails=0; lastpid=""; grace=0; lastrestart=0; resolv_tick=0
+fails=0; lastpid=""; grace=0; lastrestart=0; resolv_tick=0; route_tick=0
 while :; do
   [ "$(cat $SVM 2>/dev/null)" = "1" ] && echo 0 > $SVM
   repair_wifi_default_route
@@ -69,6 +69,10 @@ while :; do
   sh "$MODDIR/root_net.sh" >/dev/null 2>&1
   sh "$MODDIR/tsdns_start.sh" >/dev/null 2>&1
   sh "$MODDIR/net_probe.sh" >/dev/null 2>&1
+
+  # 与本机局域网重叠时关掉 accept-routes，避免本地流量绕隧道（每 30 秒评估）
+  route_tick=$((route_tick+1))
+  [ $((route_tick % 2)) -eq 1 ] && sh "$MODDIR/route_guard.sh" >/dev/null 2>&1
 
   # keep /etc/resolv.conf in sync with the current network (every ~5 min)
   resolv_tick=$((resolv_tick+1))

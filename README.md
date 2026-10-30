@@ -60,6 +60,25 @@ TS_DNS_UPSTREAM="223.5.5.5:53,119.29.29.29:53"  # 兜底转发器的上游 DNS
 TS_LOGLEVEL="normal"               # 日志级别：quiet / normal / debug（debug 开启 tailscaled 详细日志）
 ```
 
+### 局域网与对端子网重叠时自动切换
+
+如果对端 advertise 的子网（例如 `192.168.4.0/24`）与本机当前所在局域网重叠，tailscaled 会把该网段
+装进自己的路由表（`table 52`），而 `ip rule 5270: from all lookup 52` 优先级高于 netd 的打标表 ——
+于是**所有 App** 访问本地路由器/NAS/打印机都会被塞进隧道绕一圈（实测 34ms + 33% 丢包，
+直连 9ms + 0% 丢包）。
+
+模块每 30 秒比对本机地址与对端 advertise 的子网（按 CIDR 位比较，不是按前三段猜）：
+
+- **有重叠**（本机已在那个局域网）→ 自动 `tailscale set --accept-routes=false`，本地流量恢复直连
+- **不再重叠**（切到 4G/别人家 Wi-Fi）→ 自动恢复 `--accept-routes=true`，仍能访问对端子网
+
+只会撤销自己做的切换（标记文件 `/data/adb/tailscale/.accept_routes_auto`），不会覆盖手动设置。
+过程记录在 `log/route_guard.log`，例如：
+
+```
+2026-10-30 21:33:01 local net overlaps advertised route -> accept-routes=false
+```
+
 ### 日志级别与诊断
 
 设置页的「日志级别」控制排障强度：
