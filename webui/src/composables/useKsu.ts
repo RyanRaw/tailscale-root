@@ -68,9 +68,14 @@ export function useKsu() {
   const busy = ref(false)
   const refreshing = ref(false)
   const lastRefresh = ref(0)
+  let pendingRefresh = false
 
   async function refresh() {
-    if (refreshing.value) return
+    // never drop a refresh that lands while another one is running
+    if (refreshing.value) {
+      pendingRefresh = true
+      return
+    }
     refreshing.value = true
     try {
       if (!state.value.binInstalled) {
@@ -124,13 +129,17 @@ export function useKsu() {
     } finally {
       refreshing.value = false
       lastRefresh.value = Date.now()
+      if (pendingRefresh) {
+        pendingRefresh = false
+        refresh()
+      }
     }
   }
 
   async function act(fn: () => Promise<void>, msg?: string) {
     if (busy.value) return
     busy.value = true
-    try { await fn() } finally { busy.value = false; refresh() }
+    try { await fn() } finally { busy.value = false; await refresh() }
   }
 
   return { state, busy, refreshing, lastRefresh, refresh, act, exec }

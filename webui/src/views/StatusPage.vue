@@ -174,7 +174,7 @@ import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
-import { computed, onActivated, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
@@ -262,8 +262,21 @@ function startDaemon() {
 }
 function stopDaemon() {
   act(async () => {
-    await exec(`pkill -x tailscaled; rm -f ${PIDFILE}`)
-    await new Promise(r => setTimeout(r, 800))
+    await exec('pkill -x tailscaled 2>/dev/null; true')
+    // wait until the process is really gone, otherwise the status poll below
+    // still sees it and the UI keeps showing "已连接"
+    for (let i = 0; i < 12; i++) {
+      await new Promise(r => setTimeout(r, 300))
+      const p = await exec('pidof tailscaled 2>/dev/null | head -1')
+      if (!p.stdout.trim()) break
+    }
+    await exec(`rm -f ${PIDFILE} ${SOCK}`)
+    state.value.daemonRunning = false
+    state.value.pid = 0
+    state.value.etime = ''
+    state.value.status = null
+    state.value.authURL = ''
+    upError.value = ''
   })
 }
 function restartDaemon() {
@@ -339,9 +352,22 @@ watch(() => state.value.etime, (v) => {
   uptimeSeconds.value = parseEtime(v)
 })
 
+let pollTimer: number | undefined
+
+function startPoll() {
+  if (pollTimer) return
+  pollTimer = setInterval(() => {
+    if (!busy.value) refresh()
+  }, 5000) as unknown as number
+}
+function stopPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined }
+}
+
 onMounted(() => {
   loadAuthKey()
   refresh()
+  startPoll()
   uptimeTimer = setInterval(() => {
     if (state.value.daemonRunning) uptimeSeconds.value++
   }, 1000) as unknown as number
@@ -349,9 +375,14 @@ onMounted(() => {
 onActivated(() => {
   loadAuthKey()
   refresh()
+  startPoll()
+})
+onDeactivated(() => {
+  stopPoll()
 })
 onUnmounted(() => {
   stopLoginPoll()
+  stopPoll()
   if (uptimeTimer) clearInterval(uptimeTimer)
 })
 </script>
