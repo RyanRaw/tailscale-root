@@ -19,7 +19,10 @@
         <div class="settings-grid">
           <div class="setting-item">
             <div class="setting-item-label">当前版本</div>
-            <span class="text-sm">{{ state.binVersion || '未安装' }}</span>
+            <span class="text-sm">
+              {{ state.binVersion || '未安装' }}
+              <span v-if="bundle.custom" class="badge badge-xs badge-warning badge-outline ml-1">自定义</span>
+            </span>
           </div>
           <div class="setting-item">
             <div class="setting-item-label">内置版本</div>
@@ -86,6 +89,50 @@
         </div>
       </div>
 
+      <!-- Custom (self-built) binaries -->
+      <div>
+        <div class="settings-section-label">自定义二进制</div>
+        <div class="settings-grid">
+          <div class="setting-item">
+            <div class="setting-item-label">守护进程路径</div>
+            <input
+              v-model="customDaemon"
+              type="text"
+              class="input input-sm w-52"
+              placeholder="/sdcard/Download/tailscaled 或目录"
+              :disabled="installing"
+            />
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
+              CLI 路径
+              <span class="text-base-content/30 ml-1 text-xs">可选</span>
+            </div>
+            <input
+              v-model="customCli"
+              type="text"
+              class="input input-sm w-52"
+              placeholder="留空则保留现有 CLI"
+              :disabled="installing"
+            />
+          </div>
+          <div class="setting-item justify-end gap-2 flex-wrap">
+            <span class="text-xs text-base-content/40">自建版本不会被模块更新覆盖</span>
+            <button
+              class="btn btn-sm"
+              :disabled="installing || !customDaemon.trim()"
+              @click="installCustom"
+            >
+              安装自定义
+            </button>
+          </div>
+          <div v-if="bundle.customSrc" class="setting-item">
+            <div class="setting-item-label">当前来源</div>
+            <span class="text-xs text-base-content/50 break-all">{{ bundle.customSrc }}</span>
+          </div>
+        </div>
+      </div>
+
       <!-- Advanced -->
       <div>
         <div class="settings-section-label">高级</div>
@@ -133,7 +180,9 @@ const latestVersion = ref('')
 const installLog = ref<string[]>([])
 const logContainer = ref<HTMLElement>()
 
-const bundle = ref({ available: false, version: '', arch: '' })
+const bundle = ref({ available: false, version: '', arch: '', custom: false, customSrc: '' })
+const customDaemon = ref('')
+const customCli = ref('')
 
 const hasUpdate = computed(() => {
   if (!latestVersion.value || !state.value.binVersion) return false
@@ -171,6 +220,8 @@ const loadBundle = async () => {
     available: kv.AVAILABLE === '1',
     version: kv.BUNDLED || '',
     arch: kv.ARCH || '',
+    custom: kv.CUSTOM === '1',
+    customSrc: kv.CUSTOM_SRC || '',
   }
 }
 
@@ -180,6 +231,30 @@ const installBundle = async () => {
   installLog.value = []
   try {
     const r = await exec(`sh ${MODDIR}/install_bins.sh --force 2>&1`)
+    pushLog(r.stdout + '\n' + r.stderr)
+    if (r.errno === 0) {
+      await exec(`TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh 2>/dev/null`)
+      pushLog('✓ 守护进程已重启')
+      state.value.binInstalled = false
+      await refresh()
+    } else {
+      pushLog('✗ 安装失败')
+    }
+  } finally {
+    installing.value = false
+    loadBundle()
+  }
+}
+
+const installCustom = async () => {
+  const src = customDaemon.value.trim().replace(/'/g, '')
+  if (!src || installing.value) return
+  const cli = customCli.value.trim().replace(/'/g, '')
+  installing.value = true
+  installLog.value = []
+  try {
+    const cmd = `sh ${MODDIR}/install_custom.sh '${src}'` + (cli ? ` --cli '${cli}'` : '')
+    const r = await exec(cmd + ' 2>&1')
     pushLog(r.stdout + '\n' + r.stderr)
     if (r.errno === 0) {
       await exec(`TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh 2>/dev/null`)

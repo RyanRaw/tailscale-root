@@ -31,12 +31,14 @@ ensure_svm_guard() {
 ) </dev/null >/dev/null 2>&1 &
 
 # ---- user config (/data/adb/tailscale/env) ----
-TS_PROXY=""; TS_PORT="41641"; TS_HOSTNAME=""
+TS_PROXY=""; TS_PORT="41641"; TS_HOSTNAME=""; TS_TUN="tailscale0"; TS_EXTRA_ARGS=""
 [ -f "$TS_DIR/env" ] && . "$TS_DIR/env"
 # disabled: eBPF handles proxying transparently
 # [ -z "$TS_PROXY" ] && [ -d /data/adb/box ] && TS_PROXY="http://127.0.0.1:7890"
 
-[ -x "$TS_DIR/bin/tailscaled" ] || exit 0
+# Self-built / third-party daemon support: point TS_DAEMON at any executable.
+TS_DAEMON="${TS_DAEMON:-$TS_DIR/bin/tailscaled}"
+[ -x "$TS_DAEMON" ] || exit 0
 
 # This must run before either existing-daemon early return below. Otherwise a
 # dead guard leaves src_valid_mark=1 until the next reboot or manual repair.
@@ -79,12 +81,13 @@ fi
 
 HTTPS_PROXY="$TS_PROXY" \
 HTTP_PROXY="$TS_PROXY" \
-nohup "$TS_DIR/bin/tailscaled" \
-  --tun=tailscale0 \
+nohup "$TS_DAEMON" \
+  --tun="$TS_TUN" \
   --state="$TS_DIR/state/tailscaled.state" \
   --statedir="$TS_DIR/state" \
   --socket="$TS_DIR/sock" \
   --port="$TS_PORT" \
+  $TS_EXTRA_ARGS \
   < /dev/null >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"
 

@@ -36,12 +36,22 @@ INST=""
 AVAILABLE=0
 [ -n "$ARCH" ] && [ -f "$SRC/tailscale" ] && [ -f "$SRC/tailscaled" ] && AVAILABLE=1
 
+# bins that were not deployed by the module (self-built / manually installed)
+CUSTOM=0
+CUSTOM_SRC=""
+if [ -n "$INST" ] && [ -z "$MVER" ]; then
+  CUSTOM=1
+  CUSTOM_SRC=$(sed -n 's/^src=//p' "$BIN_DIR/.custom" 2>/dev/null | head -1)
+fi
+
 if [ "$MODE" = "--info" ]; then
   echo "ARCH=$ARCH"
   echo "BUNDLED=$BVER"
   echo "MANAGED=$MVER"
   echo "INSTALLED=$INST"
   echo "AVAILABLE=$AVAILABLE"
+  echo "CUSTOM=$CUSTOM"
+  echo "CUSTOM_SRC=$CUSTOM_SRC"
   exit 0
 fi
 
@@ -60,6 +70,7 @@ if [ "$MODE" = "--force" ]; then
   NEED=1
 elif [ ! -x "$BIN_DIR/tailscale" ] || [ ! -x "$BIN_DIR/tailscaled" ]; then
   NEED=1
+  [ -f "$BIN_DIR/.custom" ] && echo "⚠ 之前的自定义二进制不存在了，改用内置版本…"
   echo "未检测到已安装二进制，使用内置版本…"
 elif [ -n "$MVER" ] && [ "$MVER" = "$INST" ] && [ "$BVER" != "$INST" ]; then
   NEED=1
@@ -93,6 +104,7 @@ if [ "$NEED" = "1" ]; then
   mv -f "$BIN_DIR/tailscale.new" "$BIN_DIR/tailscale" || exit 3
   mv -f "$BIN_DIR/tailscaled.new" "$BIN_DIR/tailscaled" || exit 3
   echo "$BVER" > "$BIN_DIR/.managed_version"
+  rm -f "$BIN_DIR/.custom"
 fi
 
 VER=$("$BIN_DIR/tailscale" --version 2>/dev/null | head -1)

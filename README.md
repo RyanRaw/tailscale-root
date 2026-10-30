@@ -39,9 +39,33 @@ TS_PROXY="http://127.0.0.1:7890"  # HTTP proxy for control plane / DERP
 TS_PORT="41641"                    # WireGuard listen port
 TS_HOSTNAME="my-phone"             # Override auto-detected hostname
 TS_WAKELOCK="1"                    # Hold CPU wake lock (1=on, 0=off)
+TS_TUN="tailscale0"                # TUN interface name
+TS_EXTRA_ARGS=""                   # extra tailscaled flags, e.g. --netfilter-mode=off
+TS_DAEMON=""                       # daemon path override (empty = /data/adb/tailscale/bin/tailscaled)
 ```
 
 These can also be edited from the WebUI Settings page.
+
+## Self-built / third-party tailscaled
+
+The module can run your own daemon build (patches, `--netfilter-mode=off`,
+userspace networking, …):
+
+- **WebUI** → Install page → *自定义二进制*: enter the path of `tailscaled` on the
+  device (e.g. `/sdcard/Download/tailscaled`) or of a directory containing
+  `tailscaled` (and optionally `tailscale`), then tap *安装自定义*. The binary is
+  copied to `/data/adb/tailscale/bin/`, verified by running it (`--version`, so
+  architecture mismatches are rejected) and the daemon is restarted.
+- **Shell**: `sh /data/adb/modules/tailscale_root/install_custom.sh /sdcard/Download/tailscaled [--cli /sdcard/Download/tailscale]`
+
+A custom binary is marked user-managed (`bin/.custom`): module updates never
+overwrite it. Tap *安装内置* on the same page to return to the bundled build.
+Keep the process name `tailscaled` (the installer does this for you) — the
+watchdog and the KSU Action toggle match on that name.
+
+Extra flags a custom build needs can be set with `TS_TUN` / `TS_EXTRA_ARGS`.
+Note that the WebUI's online installer always pulls the official arm64 build and
+marks the result as user-managed too.
 
 ## Project Structure
 
@@ -50,6 +74,7 @@ module/                 # KSU module files (deployable)
 ├── module.prop
 ├── bins/               # Bundled binaries: bins/<arch>/{tailscale,tailscaled,VERSION}
 ├── install_bins.sh     # Deploys / renews the bundled binaries
+├── install_custom.sh   # Installs a self-built tailscaled (user-managed)
 ├── service.sh          # Daemon launcher + description updater
 ├── action.sh           # One-tap toggle
 ├── svm_guard.sh        # src_valid_mark watchdog + health check

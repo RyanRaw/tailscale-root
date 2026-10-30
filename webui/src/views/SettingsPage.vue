@@ -72,6 +72,20 @@
             </div>
             <input v-model="wakelockEnabled" type="checkbox" class="toggle toggle-sm" />
           </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
+              监听网卡
+              <span class="text-base-content/30 ml-1 text-xs">TS_TUN</span>
+            </div>
+            <input v-model="envVars.TS_TUN" type="text" class="input input-sm w-32" placeholder="tailscale0" />
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
+              额外参数
+              <span class="text-base-content/30 ml-1 text-xs">TS_EXTRA_ARGS</span>
+            </div>
+            <input v-model="envVars.TS_EXTRA_ARGS" type="text" class="input input-sm w-52" placeholder="如 --netfilter-mode=off" />
+          </div>
           <div class="setting-item justify-end gap-2">
             <span v-if="saveMessage" class="text-xs" :class="saveError ? 'text-error' : 'text-success'">{{ saveMessage }}</span>
             <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveEnv">
@@ -104,7 +118,11 @@ const saving = ref(false)
 const saveMessage = ref('')
 const saveError = ref(false)
 
-const envVars = reactive({ TS_PROXY: '', TS_PORT: '', TS_HOSTNAME: '', TS_WAKELOCK: '' })
+const envVars = reactive({
+  TS_PROXY: '', TS_PORT: '', TS_HOSTNAME: '', TS_WAKELOCK: '',
+  TS_TUN: '', TS_EXTRA_ARGS: '',
+})
+const ENV_KEYS = ['TS_PROXY', 'TS_PORT', 'TS_HOSTNAME', 'TS_WAKELOCK', 'TS_TUN', 'TS_EXTRA_ARGS']
 
 const wakelockEnabled = computed({
   get: () => envVars.TS_WAKELOCK === '1' || envVars.TS_WAKELOCK === 'true',
@@ -117,7 +135,7 @@ const loadEnv = async () => {
   saveMessage.value = ''
   try {
     const res = await exec(`cat ${TS_ENV_FILE} 2>/dev/null || echo ''`)
-    envVars.TS_PROXY = ''; envVars.TS_PORT = ''; envVars.TS_HOSTNAME = ''; envVars.TS_WAKELOCK = ''
+    for (const k of ENV_KEYS) (envVars as any)[k] = ''
     for (const line of res.stdout.split('\n')) {
       const t = line.trim()
       if (!t || t.startsWith('#')) continue
@@ -137,7 +155,7 @@ const saveEnv = async () => {
   saving.value = true; saveMessage.value = ''; saveError.value = false
   try {
     const res = await exec(`cat ${TS_ENV_FILE} 2>/dev/null || echo ''`)
-    const known = new Set(['TS_PROXY', 'TS_PORT', 'TS_HOSTNAME', 'TS_WAKELOCK'])
+    const known = new Set(ENV_KEYS)
     const preserved: string[] = []
     for (const line of res.stdout.split('\n')) {
       const t = line.trim()
