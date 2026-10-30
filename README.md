@@ -55,8 +55,8 @@ TS_LOGIN_SERVER=""                 # 自建控制服务器地址，留空即官�
 TS_AUTHKEY=""                      # 预授权密钥，可免去浏览器登录
 TS_UP_ARGS=""                      # 追加给 tailscale up 的参数，如 --reset
 TS_DNS=""                          # 自定义 DNS，留空自动（如 "223.5.5.5 1.1.1.1"）
-TS_DNS_UPSTREAM="223.5.5.5:53,119.29.29.29:53"  # 内置回环转发器的上游 DNS
-TS_DNS_DISABLE=0                   # 置 1 关闭内置回环 DNS 转发器（tsdns）
+TS_DNS_FALLBACK=0                  # 1 = 启用回环 DNS 兜底（仅在 androiddns 不可用时需要）
+TS_DNS_UPSTREAM="223.5.5.5:53,119.29.29.29:53"  # 兜底转发器的上游 DNS
 TS_LOGLEVEL="normal"               # 日志级别：quiet / normal / debug（debug 开启 tailscaled 详细日志）
 ```
 
@@ -123,18 +123,21 @@ Received error: fetch control key: Get "https://xxx:3443/key?v=148":
 failed to resolve "xxx": no DNS fallback candidates remain for "xxx"
 ```
 
-原因：Android 没有 `/etc/resolv.conf`。官方 APP 走的是系统 netd 解析，而本模块的 `tailscaled`
-是**静态 Go 二进制**（无 cgo），只能读 `/etc/resolv.conf`；文件缺失时 Go 会退回内置的
-`defaultNS = 127.0.0.1:53`。于是只有「解析控制服务器」这一步失败，其它 App 完全正常。
+原因：Android 没有 `/etc/resolv.conf`，官方 APP 走系统 netd 解析，而本模块的 `tailscaled`
+是**静态 Go 二进制**（无 cgo），默认只读 `/etc/resolv.conf`。
 
-处理：模块随包带了一个 `tsdns`（约 2.4MB 的回环 DNS 转发器），只监听 `127.0.0.1`，把查询转发到
-`TS_DNS_UPSTREAM`（默认 `223.5.5.5`、`119.29.29.29`）。它只服务于 tailscaled，**不劫持系统 DNS、
-不写 `/system`、不影响其它 App**：
+处理：1.104+ 的官方二进制自带 `androiddns` 特性 —— 启动时如果没有 `/etc/resolv.conf`，会检测
+`/dev/__properties__` 与 `/dev/socket/dnsproxyd`，能连上就直接说 dnsproxyd 协议（和 bionic
+`getaddrinfo` 同一条路，自带 per-network DNS 与 Private DNS）。**正常情况下不需要任何配置，
+也不占用任何端口。**
 
-- 端口已被别的程序占用时直接让位，不抢占（日志里是 `127.0.0.1:53 already in use, skip`）
-- tailscaled 停止后看门狗会把它一起收掉，端口随即释放
-- 不想用：`TS_DNS_DISABLE=1`；换上游：`TS_DNS_UPSTREAM="1.1.1.1:53,8.8.8.8:53"`
-- 系统本身有 `/etc/resolv.conf` 时（Magisk 一类能叠加新文件的 ROM），tsdns 不会启动
+出现这个报错时依次检查：
+
+1. 二进制版本是否 < 1.104（WebUI 安装页可看），旧版没有该特性；
+2. `su -c 'ls -l /dev/socket/dnsproxyd'` 是否存在、当前 SELinux 是否拦了连接；
+3. 都不行时可开兜底：`env` 里 `TS_DNS_FALLBACK=1`，模块会在回环 `127.0.0.1:53` 起一个转发器，
+   把查询转给 `TS_DNS_UPSTREAM`（默认 `223.5.5.5`、`119.29.29.29`）。该兜底只服务 tailscaled，
+   不劫持系统 DNS、不写 `/system`；端口被别的程序占用时会让位，tailscaled 停止后随即释放。
 
 改完 `env` 后重启一次 tailscaled，再回状态页点「获取链接」重新发起登录。
 

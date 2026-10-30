@@ -96,8 +96,8 @@ VERBOSE_ARG=""
 # one network snapshot per daemon start
 sh "$MODDIR/net_probe.sh" now >/dev/null 2>&1
 
-# 静态 Go 二进制只认 /etc/resolv.conf；Android 上它不存在时 Go 会退回
-# 127.0.0.1:53，先把这个地址上的本地转发器拉起来再启动守护进程。
+# 1.104+ 的二进制自带 androiddns（走 dnsproxyd），正常无需任何 DNS 辅助。
+# 这里只在 androiddns 不可用、且用户显式开启兜底时，才拉起回环转发器。
 sh "$MODDIR/tsdns_start.sh" >/dev/null 2>&1
 
 HTTPS_PROXY="$TS_PROXY" \
