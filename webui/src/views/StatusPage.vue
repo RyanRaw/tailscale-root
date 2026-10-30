@@ -147,7 +147,7 @@
         <div class="settings-section-label flex items-center">
           <span class="flex-1">网络诊断</span>
           <button class="btn btn-ghost btn-xs" :disabled="diagBusy" @click="runDiag">
-            {{ diagBusy ? '检测中…' : '运行' }}
+            {{ diagBusy ? '抓取中…' : '抓取' }}
           </button>
           <button class="btn btn-ghost btn-xs text-primary" :disabled="diagBusy" @click="fixNet">
             修复
@@ -155,7 +155,9 @@
         </div>
         <div class="settings-grid">
           <div v-if="!diag" class="setting-item justify-center">
-            <span class="text-base-content/40 text-sm py-2">点「运行」检查 root 出网与 DNS 状态</span>
+            <span class="text-base-content/40 text-sm py-2">
+              点「抓取」立即采集一份到 log/net_probe.log（设置页日志级别为调试时每 60 秒自动采集）
+            </span>
           </div>
           <pre
             v-else
@@ -346,23 +348,13 @@ function tsLogout() {
 const diag = ref('')
 const diagBusy = ref(false)
 
-const DIAG_CMD = `
-echo "== route get v4 =="; ip -4 route get 1.1.1.1 2>&1 | head -2
-echo "== route get v6 =="; ip -6 route get 2001:4860:4860::8888 2>&1 | head -2
-echo "== default routes =="; ip -4 route show table all 2>/dev/null | grep "^default" | head -4; ip -6 route show table all 2>/dev/null | grep "^default" | head -4
-echo "== main table =="; ip -4 route show table main 2>&1 | head -4
-echo "== /etc/resolv.conf =="; cat /etc/resolv.conf 2>&1 | head -5
-echo "== dns props =="; for p in net.dns1 net.dns2 net.dns3; do echo "$p=$(getprop $p)"; done
-echo "== curl api.github.com =="; curl -s -o /dev/null -w "%{http_code}" --max-time 6 https://api.github.com 2>&1; echo
-echo "== curl login server =="; srv=$(grep "^TS_LOGIN_SERVER=" ${TS_DIR}/env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"'); if [ -n "$srv" ]; then curl -s -o /dev/null -w "%{http_code}" --max-time 6 "$srv" 2>&1; echo; else echo "(未设置)"; fi
-`.trim()
-
 async function runDiag() {
   if (diagBusy.value) return
   diagBusy.value = true
   try {
-    const r = await exec(DIAG_CMD)
-    diag.value = (r.stdout + r.stderr).trim()
+    await exec(`sh ${MODDIR}/net_probe.sh now 2>&1`)
+    const r = await exec(`tail -n 40 ${TS_DIR}/log/net_probe.log 2>/dev/null`)
+    diag.value = r.stdout.trim()
   } finally {
     diagBusy.value = false
   }

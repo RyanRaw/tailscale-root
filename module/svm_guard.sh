@@ -67,6 +67,7 @@ while :; do
   repair_wifi_default_route
   ensure_coloros_guard
   sh "$MODDIR/root_net.sh" >/dev/null 2>&1
+  sh "$MODDIR/net_probe.sh" >/dev/null 2>&1
 
   # keep /etc/resolv.conf in sync with the current network (every ~5 min)
   resolv_tick=$((resolv_tick+1))

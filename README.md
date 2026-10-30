@@ -55,7 +55,24 @@ TS_LOGIN_SERVER=""                 # 自建控制服务器地址，留空即官�
 TS_AUTHKEY=""                      # 预授权密钥，可免去浏览器登录
 TS_UP_ARGS=""                      # 追加给 tailscale up 的参数，如 --reset
 TS_DNS=""                          # 自定义 DNS，留空自动（如 "223.5.5.5 1.1.1.1"）
+TS_LOGLEVEL="normal"               # 日志级别：quiet / normal / debug（debug 开启 tailscaled 详细日志）
 ```
+
+### 日志级别与诊断
+
+设置页的「日志级别」控制排障强度：
+
+| 级别 | tailscaled | 网络快照 `log/net_probe.log` |
+| --- | --- | --- |
+| 静默 quiet | 常规 | 不自动采集（只能手动抓取） |
+| 标准 normal | 常规 | 每 5 分钟一条 |
+| 调试 debug | 追加 `--verbose=2` 详细日志 | 每 60 秒一条 |
+
+`log/net_probe.log` 每条记录包含：`route get`（v4/v6）、全部默认路由、main 表、网卡 IPv4、`/etc/resolv.conf`、
+`net.dns1/2`、守护进程 pid 与 BackendState、`curl` 直连 GitHub 与登录服务器的返回码和时间、以及 tailscaled 最近的报错。
+
+WebUI 日志页右上角可以切换日志源：守护进程 / 网络诊断 / 登录 / 看门狗 / DNS / 二进制部署。
+状态页「网络诊断」的「抓取」按钮会立即写一条快照并展示出来。
 
 ## 自建控制服务器（Headscale）
 

@@ -32,7 +32,7 @@ ensure_svm_guard() {
 
 # ---- user config (/data/adb/tailscale/env) ----
 TS_PROXY=""; TS_PORT="41641"; TS_HOSTNAME=""; TS_TUN="tailscale0"; TS_EXTRA_ARGS=""
-TS_AUTHKEY=""
+TS_AUTHKEY=""; TS_LOGLEVEL="normal"
 [ -f "$TS_DIR/env" ] && . "$TS_DIR/env"
 # disabled: eBPF handles proxying transparently
 # [ -z "$TS_PROXY" ] && [ -d /data/adb/box ] && TS_PROXY="http://127.0.0.1:7890"
@@ -89,6 +89,13 @@ if [ -z "$H" ]; then
 fi
 [ -n "$H" ] && echo "$H" > /proc/sys/kernel/hostname
 
+# TS_LOGLEVEL=debug turns on tailscaled verbose logging + periodic net snapshots
+VERBOSE_ARG=""
+[ "$TS_LOGLEVEL" = "debug" ] && VERBOSE_ARG="--verbose=2"
+
+# one network snapshot per daemon start
+sh "$MODDIR/net_probe.sh" now >/dev/null 2>&1
+
 HTTPS_PROXY="$TS_PROXY" \
 HTTP_PROXY="$TS_PROXY" \
 nohup "$TS_DAEMON" \
@@ -97,6 +104,7 @@ nohup "$TS_DAEMON" \
   --statedir="$TS_DIR/state" \
   --socket="$TS_DIR/sock" \
   --port="$TS_PORT" \
+  $VERBOSE_ARG \
   $TS_EXTRA_ARGS \
   < /dev/null >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"

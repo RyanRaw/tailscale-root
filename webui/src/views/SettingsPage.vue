@@ -81,6 +81,17 @@
           </div>
           <div class="setting-item">
             <div class="setting-item-label">
+              日志级别
+              <span class="text-base-content/30 ml-1 text-xs">TS_LOGLEVEL</span>
+            </div>
+            <select v-model="envVars.TS_LOGLEVEL" class="select select-sm min-w-24">
+              <option value="quiet">静默</option>
+              <option value="normal">标准</option>
+              <option value="debug">调试</option>
+            </select>
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">
               额外参数
               <span class="text-base-content/30 ml-1 text-xs">TS_EXTRA_ARGS</span>
             </div>
@@ -160,12 +171,12 @@ const saveError = ref(false)
 
 const envVars = reactive({
   TS_PROXY: '', TS_PORT: '', TS_HOSTNAME: '', TS_WAKELOCK: '',
-  TS_TUN: '', TS_EXTRA_ARGS: '',
+  TS_TUN: '', TS_EXTRA_ARGS: '', TS_LOGLEVEL: '',
   TS_LOGIN_SERVER: '', TS_AUTHKEY: '', TS_UP_ARGS: '', TS_DNS: '',
 })
 const ENV_KEYS = [
   'TS_PROXY', 'TS_PORT', 'TS_HOSTNAME', 'TS_WAKELOCK', 'TS_TUN', 'TS_EXTRA_ARGS',
-  'TS_LOGIN_SERVER', 'TS_AUTHKEY', 'TS_UP_ARGS', 'TS_DNS',
+  'TS_LOGLEVEL', 'TS_LOGIN_SERVER', 'TS_AUTHKEY', 'TS_UP_ARGS', 'TS_DNS',
 ]
 
 const dnsSummary = ref('')
@@ -209,6 +220,7 @@ const loadEnv = async () => {
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1)
       if (key in envVars) (envVars as any)[key] = val
     }
+    if (!envVars.TS_LOGLEVEL) envVars.TS_LOGLEVEL = 'normal'
     envLoaded.value = true
   } finally { envLoading.value = false }
 }

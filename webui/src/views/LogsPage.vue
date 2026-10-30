@@ -9,6 +9,9 @@
         <span class="text-base-content/40">|</span>
         <span class="text-base-content/60 tabular-nums">{{ logs.length }} 条</span>
         <div class="flex-1" />
+        <select v-model="source" class="select select-xs w-20" @change="loadLogs">
+          <option v-for="s in SOURCES" :key="s.key" :value="s.key">{{ s.label }}</option>
+        </select>
         <button
           class="btn btn-ghost btn-sm btn-circle"
           :disabled="loadingLogs"
@@ -69,14 +72,25 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
-import { exec, LOG } from '@/composables/useKsu'
+import { exec, TS_DIR } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { ArrowPathIcon, TrashIcon } from '@heroicons/vue/24/outline'
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 
 interface LogEntry { time: string; level: string; msg: string }
+
+const SOURCES = [
+  { key: 'tailscaled.log', label: '守护进程' },
+  { key: 'net_probe.log', label: '网络诊断' },
+  { key: 'up.log', label: '登录' },
+  { key: 'watchdog.log', label: '看门狗' },
+  { key: 'resolv.log', label: 'DNS' },
+  { key: 'install_bins.log', label: '二进制' },
+]
+const source = ref('tailscaled.log')
+const logPath = computed(() => `${TS_DIR}/log/${source.value}`)
 
 const logs = ref<LogEntry[]>([])
 const loadingLogs = ref(false)
@@ -116,7 +130,7 @@ const loadLogs = async () => {
   if (loadingLogs.value) return
   loadingLogs.value = true
   try {
-    const res = await exec(`tail -300 ${LOG} 2>/dev/null || echo ''`)
+    const res = await exec(`tail -300 ${logPath.value} 2>/dev/null || echo ''`)
     const parsed = res.stdout.split('\n').map(parseLine).filter(Boolean) as LogEntry[]
     parsed.forEach((e, i) => { (e as any).seq = i + 1 })
     logs.value = parsed.reverse()
@@ -127,7 +141,7 @@ const loadLogs = async () => {
 
 const followTick = async () => {
   if (!follow.value) return
-  const res = await exec(`tail -300 ${LOG} 2>/dev/null || echo ''`)
+  const res = await exec(`tail -300 ${logPath.value} 2>/dev/null || echo ''`)
   const parsed = res.stdout.split('\n').map(parseLine).filter(Boolean) as LogEntry[]
   if (parsed.length !== logs.value.length || (parsed.length > 0 && parsed[parsed.length - 1].msg !== logs.value[0]?.msg)) {
     parsed.forEach((e, i) => { (e as any).seq = i + 1 })
