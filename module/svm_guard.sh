@@ -61,7 +61,7 @@ ensure_coloros_guard() {
   setsid inotifyd "$COLOROS_GUARD" /data/misc/net >/dev/null 2>&1 &
 }
 
-fails=0; lastpid=""; grace=0; lastrestart=0; resolv_tick=0; route_tick=0; log_tick=0
+fails=0; lastpid=""; grace=0; lastrestart=0; resolv_tick=0; log_tick=0
 while :; do
   [ "$(cat $SVM 2>/dev/null)" = "1" ] && echo 0 > $SVM
   repair_wifi_default_route
@@ -71,19 +71,18 @@ while :; do
   sh "$MODDIR/net_probe.sh" >/dev/null 2>&1
 
   # 与本机局域网重叠时关掉 accept-routes，避免本地流量绕隧道（每 30 秒评估）
-  route_tick=$((route_tick+1))
-  [ $((route_tick % 2)) -eq 1 ] && sh "$MODDIR/route_guard.sh" >/dev/null 2>&1
+  sh "$MODDIR/route_guard.sh" >/dev/null 2>&1
 
   # keep /etc/resolv.conf in sync with the current network (every ~5 min)
   resolv_tick=$((resolv_tick+1))
-  [ $((resolv_tick % 20)) -eq 1 ] && sh "$MODDIR/update_resolv.sh" --quick >/dev/null 2>&1
+  [ $((resolv_tick % 10)) -eq 1 ] && sh "$MODDIR/update_resolv.sh" --quick >/dev/null 2>&1
 
   # service.sh only rolls tailscaled.log at daemon start, so a long-running
   # daemon can grow it without bound. Check every ~5 min, and copy-truncate
   # instead of mv — the daemon holds the fd and would keep writing to the
   # renamed file.
   log_tick=$((log_tick+1))
-  if [ $((log_tick % 20)) -eq 1 ]; then
+  if [ $((log_tick % 10)) -eq 1 ]; then
     log_sz=$(stat -c %s "$TS_DIR/log/tailscaled.log" 2>/dev/null || echo 0)
     if [ "$log_sz" -gt 2097152 ]; then
       cp -f "$TS_DIR/log/tailscaled.log" "$TS_DIR/log/tailscaled.log.old" 2>/dev/null \
@@ -108,11 +107,11 @@ while :; do
 
   if [ -n "$pid" ] && [ -S "$TS_DIR/sock" ]; then
     if [ "$pid" != "$lastpid" ]; then
-      lastpid="$pid"; grace=6; fails=0      # new daemon: ~90s grace
+      lastpid="$pid"; grace=3; fails=0      # new daemon: ~90s grace
     fi
     if [ "$grace" -gt 0 ]; then
       grace=$((grace-1))
-    elif timeout 10 "$TS_DIR/bin/tailscale" --socket="$TS_DIR/sock" status --json >/dev/null 2>&1; then
+    elif timeout 10 "$TS_DIR/bin/tailscale" --socket="$TS_DIR/sock" status --json --peers=false >/dev/null 2>&1; then
       fails=0
     else
       fails=$((fails+1))
@@ -129,5 +128,7 @@ while :; do
   else
     fails=0; lastpid=""
   fi
-  sleep 15
+  # 30s keeps the same wake-up budget as before for route_guard, while halving
+  # the process churn from root_net/tsdns/probe that used to run every 15s.
+  sleep 30
 done
