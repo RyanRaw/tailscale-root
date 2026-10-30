@@ -178,10 +178,7 @@
               <span class="text-sm">{{ state.guardOn ? '活跃' : state.daemonRunning ? '未运行' : '空闲' }}</span>
             </div>
           </div>
-          <div v-if="svmBad" class="setting-item justify-end">
-            <button class="btn btn-error btn-xs" @click="fixSvm">修复</button>
-          </div>
-          <div v-else-if="state.daemonRunning && !state.guardOn" class="setting-item justify-end">
+          <div v-if="state.daemonRunning && !state.guardOn" class="setting-item justify-end">
             <button class="btn btn-ghost btn-xs" @click="startGuard">启动</button>
           </div>
         </div>
@@ -192,7 +189,7 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
-import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, SVM, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
+import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -357,9 +354,6 @@ async function runDiag() {
   }
 }
 
-function fixSvm() {
-  act(async () => { await exec(`echo 0 > ${SVM}`) })
-}
 function startGuard() {
   act(async () => {
     await exec(`nohup sh ${MODDIR}/svm_guard.sh </dev/null >/dev/null 2>&1 &`)
