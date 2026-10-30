@@ -68,6 +68,11 @@ ip link show tailscale0 >/dev/null 2>&1 && ip link del tailscale0 2>/dev/null
 
 [ -z "$TS_SKIP_WAIT" ] && sleep 8
 
+# tailscaled is a static Go binary: it cannot use Android's netd resolver and
+# only reads /etc/resolv.conf (absent on Android). Refresh the overlay copy so
+# the control server / DERP host names actually resolve.
+sh "$MODDIR/update_resolv.sh" >/dev/null 2>&1
+
 H="$TS_HOSTNAME"
 if [ -z "$H" ]; then
   DEVNAME=$(settings get global device_name 2>/dev/null)
