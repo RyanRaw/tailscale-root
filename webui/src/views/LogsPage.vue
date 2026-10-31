@@ -1,8 +1,16 @@
 <template>
   <div
+    ref="scrollEl"
     class="h-full overflow-x-hidden overflow-y-auto"
     :style="padding"
   >
+    <PullRefreshIndicator
+      :distance="pullDistance"
+      :refreshing="pullRefreshing"
+      :dragging="pullDragging"
+      :ready="pullReady"
+      :threshold="pullThreshold"
+    />
     <CtrlsBar>
       <div class="flex h-12 flex-row items-center gap-2 p-2 text-sm">
         <span>日志</span>
@@ -73,14 +81,26 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
+import PullRefreshIndicator from '@/components/common/PullRefreshIndicator.vue'
 import { exec, TS_DIR } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
+import { usePullRefresh } from '@/composables/usePullRefresh'
 import { showNotification } from '@/helper/notification'
 import { ArrowPathIcon, TrashIcon } from '@heroicons/vue/24/outline'
 import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
+
+const scrollEl = ref<HTMLElement>()
+const {
+  distance: pullDistance,
+  refreshing: pullRefreshing,
+  dragging: pullDragging,
+  ready: pullReady,
+  threshold: pullThreshold,
+  // loadLogs 是下面的 const，包一层避免在 setup 阶段取值
+} = usePullRefresh(scrollEl, () => loadLogs())
 
 interface LogEntry { time: string; level: string; msg: string }
 

@@ -1,8 +1,16 @@
 <template>
   <div
+    ref="scrollEl"
     class="h-full overflow-x-hidden overflow-y-auto"
     :style="padding"
   >
+    <PullRefreshIndicator
+      :distance="pullDistance"
+      :refreshing="pullRefreshing"
+      :dragging="pullDragging"
+      :ready="pullReady"
+      :threshold="pullThreshold"
+    />
     <CtrlsBar>
       <div class="flex h-12 flex-row items-center gap-2 p-2 text-sm">
         <span>Tailscale</span>
@@ -198,14 +206,25 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
+import PullRefreshIndicator from '@/components/common/PullRefreshIndicator.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { usePullRefresh } from '@/composables/usePullRefresh'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
+
+const scrollEl = ref<HTMLElement>()
+const {
+  distance: pullDistance,
+  refreshing: pullRefreshing,
+  dragging: pullDragging,
+  ready: pullReady,
+  threshold: pullThreshold,
+} = usePullRefresh(scrollEl, refresh)
 
 const showPrivacy = ref(false)
 const upError = ref('')

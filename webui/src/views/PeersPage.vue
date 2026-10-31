@@ -1,8 +1,16 @@
 <template>
   <div
+    ref="scrollEl"
     class="h-full overflow-x-hidden overflow-y-auto"
     :style="padding"
   >
+    <PullRefreshIndicator
+      :distance="pullDistance"
+      :refreshing="pullRefreshing"
+      :dragging="pullDragging"
+      :ready="pullReady"
+      :threshold="pullThreshold"
+    />
     <CtrlsBar>
       <div class="flex h-12 flex-row items-center gap-2 p-2 text-sm">
         <span>节点</span>
@@ -137,14 +145,25 @@
 <script setup lang="ts">
 import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
+import PullRefreshIndicator from '@/components/common/PullRefreshIndicator.vue'
 import { useKsu, BIN, SOCK } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { ArrowPathIcon, SignalIcon, EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onMounted, ref } from 'vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { usePullRefresh } from '@/composables/usePullRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
+
+const scrollEl = ref<HTMLElement>()
+const {
+  distance: pullDistance,
+  refreshing: pullRefreshing,
+  dragging: pullDragging,
+  ready: pullReady,
+  threshold: pullThreshold,
+} = usePullRefresh(scrollEl, refresh)
 
 const showOffline = ref(false)
 const showIPs = ref(false)

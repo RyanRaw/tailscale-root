@@ -1,8 +1,16 @@
 <template>
   <div
+    ref="scrollEl"
     class="h-full overflow-x-hidden overflow-y-auto"
     :style="padding"
   >
+    <PullRefreshIndicator
+      :distance="pullDistance"
+      :refreshing="pullRefreshing"
+      :dragging="pullDragging"
+      :ready="pullReady"
+      :threshold="pullThreshold"
+    />
     <CtrlsBar>
       <div class="flex h-12 flex-row items-center gap-2 p-2 text-sm">
         <span>安装</span>
@@ -197,13 +205,28 @@
 <script setup lang="ts">
 import { useKsu, TS_DIR, MODDIR, PIDFILE, DAEMON } from '@/composables/useKsu'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
+import PullRefreshIndicator from '@/components/common/PullRefreshIndicator.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { showConfirmDialog } from '@/helper/confirmDialog'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { usePullRefresh } from '@/composables/usePullRefresh'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
 const { state, busy, refreshing, refresh, act, exec } = useKsu()
+
+const scrollEl = ref<HTMLElement>()
+const {
+  distance: pullDistance,
+  refreshing: pullRefreshing,
+  dragging: pullDragging,
+  ready: pullReady,
+  threshold: pullThreshold,
+  // 下拉时连同离线包信息一起重读（loadBundle 在下面才定义，包一层延后取值）
+} = usePullRefresh(scrollEl, async () => {
+  await loadBundle()
+  await refresh()
+})
 
 const versionTag = ref('')
 const customUrl = ref('')
