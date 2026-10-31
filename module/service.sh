@@ -20,12 +20,17 @@ ensure_svm_guard() {
     </dev/null >"$TS_DIR/log/svm_guard.out" 2>&1 &
 }
 
-# Update module description in background (every 30s)
+# Update module description in background (every 30s).
+# Every 20 rounds (~10 min) re-resolve the control server: /data/host holds a
+# literal address, so a DNS change or a roaming IP would otherwise go stale.
 (
   sleep 8
+  n=0
   while true; do
     sh "$MODDIR/update_desc.sh"
     ensure_svm_guard
+    n=$((n + 1))
+    [ $((n % 20)) -eq 0 ] && sh "$MODDIR/ts_hosts.sh" --hosts >/dev/null 2>&1
     sleep 30
   done
 ) </dev/null >/dev/null 2>&1 &
@@ -71,10 +76,14 @@ ip link show tailscale0 >/dev/null 2>&1 && ip link del tailscale0 2>/dev/null
 
 [ -z "$TS_SKIP_WAIT" ] && sleep 8
 
-# tailscaled is a static Go binary: it cannot use Android's netd resolver and
-# only reads /etc/resolv.conf (absent on Android). Refresh the overlay copy so
-# the control server / DERP host names actually resolve.
+# Static Go binaries ignore Android's netd resolver and read only /etc/hosts and
+# /etc/resolv.conf. Neither is usable here: /system is read-only, so the module's
+# system/etc/resolv.conf never gets mounted (KernelSU bind-mounts single files and
+# the target must already exist), and /etc/hosts only contains localhost.
+# ts_hosts.sh points the binary's hosts path at /data/host and fills that file with
+# the control server address resolved through bionic (netd / dnsproxyd).
 sh "$MODDIR/update_resolv.sh" >/dev/null 2>&1
+sh "$MODDIR/ts_hosts.sh" >/dev/null 2>&1
 
 # Root traffic has no fwmark, so it only sees the (usually empty) main routing
 # table -> "connect: network is unreachable". Mirror the default route.

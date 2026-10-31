@@ -6,6 +6,7 @@
 # Custom binaries are adopted as "user managed": the module never overwrites them
 # on boot, and "安装内置" in the WebUI restores the bundled build.
 TS_DIR=/data/adb/tailscale
+MODDIR=${0%/*}
 BIN_DIR="$TS_DIR/bin"
 SRC=""
 CLI_SRC=""
@@ -113,6 +114,11 @@ if pgrep -x tailscaled >/dev/null 2>&1; then
   while pgrep -x tailscaled >/dev/null 2>&1 && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
 fi
 rm -f "$TS_DIR/sock" "$TS_DIR/tailscaled.pid"
+
+# Point the hosts path at /data/host before going live: Android's /etc/hosts has
+# only localhost and /etc/resolv.conf cannot exist on a read-only /system.
+sh "$MODDIR/ts_hosts.sh" --patch "$TMP_D" >/dev/null 2>&1
+[ -n "$CLI_SRC" ] && sh "$MODDIR/ts_hosts.sh" --patch "$TMP_C" >/dev/null 2>&1
 
 # rename swap keeps "text file busy" away and is atomic for path lookups
 mv -f "$TMP_D" "$BIN_DIR/tailscaled" || { echo "✗ 替换 tailscaled 失败"; exit 3; }

@@ -112,6 +112,10 @@ if [ "$NEED" = "1" ]; then
     exit 3
   fi
   chmod 755 "$BIN_DIR/tailscale.new" "$BIN_DIR/tailscaled.new"
+  # Point the binaries' hosts path at /data/host before they go live: Android's
+  # /etc/hosts only has localhost and /etc/resolv.conf cannot exist here.
+  sh "$MODDIR/ts_hosts.sh" --patch "$BIN_DIR/tailscale.new" >/dev/null 2>&1
+  sh "$MODDIR/ts_hosts.sh" --patch "$BIN_DIR/tailscaled.new" >/dev/null 2>&1
   # rename swap: avoids "text file busy" on a running daemon
   mv -f "$BIN_DIR/tailscale.new" "$BIN_DIR/tailscale" || exit 3
   mv -f "$BIN_DIR/tailscaled.new" "$BIN_DIR/tailscaled" || exit 3
