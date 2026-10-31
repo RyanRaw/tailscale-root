@@ -203,7 +203,7 @@
 </template>
 
 <script setup lang="ts">
-import { useKsu, TS_DIR, MODDIR, PIDFILE, DAEMON } from '@/composables/useKsu'
+import { useKsu, TS_DIR, MODDIR, PIDFILE, DAEMON, restartTailscaled } from '@/composables/useKsu'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import PullRefreshIndicator from '@/components/common/PullRefreshIndicator.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
@@ -324,8 +324,8 @@ const installBundle = async () => {
     const r = await exec(`sh ${MODDIR}/install_bins.sh --force 2>&1`)
     pushLog(r.stdout + '\n' + r.stderr)
     if (r.errno === 0) {
-      await exec(`TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh 2>/dev/null`)
-      pushLog('✓ 守护进程已重启')
+      const up = await restartTailscaled()
+      pushLog(up ? '✓ 守护进程已重启' : '✗ 守护进程启动失败')
       state.value.binInstalled = false
       await refresh()
     } else {
@@ -348,8 +348,8 @@ const installCustom = async () => {
     const r = await exec(cmd + ' 2>&1')
     pushLog(r.stdout + '\n' + r.stderr)
     if (r.errno === 0) {
-      await exec(`TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh 2>/dev/null`)
-      pushLog('✓ 守护进程已重启')
+      const up = await restartTailscaled()
+      pushLog(up ? '✓ 守护进程已重启' : '✗ 守护进程启动失败')
       state.value.binInstalled = false
       await refresh()
     } else {

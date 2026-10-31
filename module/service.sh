@@ -150,9 +150,16 @@ echo $! > "$PIDFILE"
   while [ $i -lt 15 ] && [ ! -S "$TS_DIR/sock" ]; do sleep 1; i=$((i+1)); done
   [ -S "$TS_DIR/sock" ] || exit 0
   desired="${TS_LOGIN_SERVER:-https://controlplane.tailscale.com}"
-  # IPC 会挂：daemon 刚被 timeout 掉/正在换控制面时 status 类请求可能一直不回
-  cur=$(timeout 10 sh "$MODDIR/ts_up.sh" --current 2>/dev/null)
-  # 空 = 读不到（IPC 卡住/daemon 刚起），本次不切，下轮重启再说
+  # daemon 刚起来时 localapi 可能还没就绪，读不到当前控制面就重试几次：
+  # 一次读不到就放弃的话，env 里清掉的自建地址会一直生效到下次重启。
+  cur=""
+  r=0
+  while [ $r -lt 4 ] && [ -z "$cur" ]; do
+    cur=$(timeout 10 sh "$MODDIR/ts_up.sh" --current 2>/dev/null)
+    [ -n "$cur" ] && break
+    sleep 2
+    r=$((r + 1))
+  done
   if [ -n "$cur" ] && [ "$cur" != "$desired" ]; then
     echo "[control] $cur -> $desired" >>"$TS_DIR/log/up.log"
     # 换控制面后 up 会一直等交互登录，不能让它常驻：实测它会把 daemon 的状态接口

@@ -207,7 +207,7 @@
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import PullRefreshIndicator from '@/components/common/PullRefreshIndicator.vue'
-import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
+import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE, restartTailscaled } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { usePullRefresh } from '@/composables/usePullRefresh'
@@ -328,11 +328,11 @@ function stopDaemon() {
 }
 function restartDaemon() {
   act(async () => {
-    await exec(`pkill -x tailscaled; rm -f ${PIDFILE}; sleep 1; TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh`)
+    await restartTailscaled()
     for (let i = 0; i < 10; i++) {
-      await new Promise(r => setTimeout(r, 1000))
       await refresh()
       if (state.value.status?.BackendState === 'Running') break
+      await new Promise(r => setTimeout(r, 800))
     }
   })
 }

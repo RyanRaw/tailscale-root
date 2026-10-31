@@ -45,7 +45,7 @@
 | 节点 | 查看所有节点、测延迟 |
 | 安装 | 安装 / 切换 / 重装内置版本；在线安装（指定版本或自定义 URL）；在外置与内置之间手动切换，外置可一键删除并回滚（可扫描设备文件） |
 | 日志 | 6 类来源（守护进程 / 网络诊断 / 登录 / 看门狗 / DNS / 二进制部署）；跟随刷新、清空当前日志 |
-| 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_ROUTE_GUARD`、`TS_TUN`、`TS_EXTRA_ARGS`、`TS_LOGIN_SERVER`、`TS_AUTHKEY`、`TS_UP_ARGS`、`TS_DNS`、`TS_LOGLEVEL` |
+| 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_ROUTE_GUARD`、`TS_TUN`、`TS_EXTRA_ARGS`、`TS_LOGIN_SERVER`、`TS_AUTHKEY`、`TS_UP_ARGS`、`TS_DNS`、`TS_LOGLEVEL`；保存即自动重启守护进程 |
 
 ## 配置
 

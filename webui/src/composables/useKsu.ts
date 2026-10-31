@@ -144,6 +144,27 @@ async function refresh() {
   }
 }
 
+// 停旧进程 → 等它真的退出（必要时 SIGKILL）→ 交给 service.sh 拉起。
+// 只 pkill 一下紧接着调 service.sh 是不行的：老进程可能要几十秒才退（本地
+// API 卡住时甚至不响应 SIGTERM），而 service.sh 在 8 秒内看到同名进程还活着
+// 就直接收编它的 pid 然后 return，等于根本没重启。
+export async function restartTailscaled(timeoutMs = 20000): Promise<boolean> {
+  await exec(
+    'pkill -x tailscaled 2>/dev/null; ' +
+      `rm -f ${PIDFILE} ${SOCK}; ` +
+      'i=0; while [ $i -lt 15 ] && pidof tailscaled >/dev/null 2>&1; do sleep 1; i=$((i+1)); done; ' +
+      'p=$(pidof tailscaled | head -1); if [ -n "$p" ]; then kill -9 "$p" 2>/dev/null; sleep 1; fi; ' +
+      `rm -f ${PIDFILE} ${SOCK}; TS_SKIP_WAIT=1 sh ${MODDIR}/service.sh >/dev/null 2>&1`,
+  )
+  const rounds = Math.max(1, Math.round(timeoutMs / 500))
+  for (let i = 0; i < rounds; i++) {
+    await new Promise((r) => setTimeout(r, 500))
+    const p = await exec('pidof tailscaled 2>/dev/null | head -1')
+    if (p.stdout.trim()) return true
+  }
+  return false
+}
+
 async function act(fn: () => Promise<void>, msg?: string) {
   if (busy.value) return
   busy.value = true

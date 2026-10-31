@@ -135,7 +135,7 @@
           <div class="setting-item justify-end gap-2">
             <span v-if="saveMessage" class="text-xs" :class="saveError ? 'text-error' : 'text-success'">{{ saveMessage }}</span>
             <button class="btn btn-primary btn-sm" :disabled="saving" @click="saveEnv">
-              {{ saving ? '保存中…' : '保存' }}
+              {{ saving ? '保存并重启中…' : '保存并重启' }}
             </button>
           </div>
         </template>
@@ -146,7 +146,7 @@
 </template>
 
 <script setup lang="ts">
-import { exec, MODDIR } from '@/composables/useKsu'
+import { exec, MODDIR, restartTailscaled } from '@/composables/useKsu'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { autoTheme, darkTheme, defaultTheme } from '@/store/settings'
@@ -235,10 +235,15 @@ const saveEnv = async () => {
       // 立刻按新配置重写 resolv.conf。清空 TS_DNS 时 --quick 在网络没变的情况下
       // 会直接退出，不跑这一次就会一直留着旧值。
       await exec(`sh ${MODDIR}/update_resolv.sh 2>&1`)
-      if (envVars.TS_AUTHKEY || envVars.TS_LOGIN_SERVER) {
-        saveMessage.value = '已保存，到状态页重新登录后生效'
+      // 保存即生效：env 里全是 tailscaled 的启动参数/进程环境，不重启等于没改。
+      // 重启走 service.sh，它顺带处理控制服务器变化（不一致时自动切换并重新生成登录链接）。
+      const up = await restartTailscaled()
+      if (!up) {
+        saveMessage.value = '已保存，守护进程正在启动…'
+      } else if (envVars.TS_LOGIN_SERVER) {
+        saveMessage.value = '已保存并重启；控制服务器若有变化，到状态页获取新的登录链接'
       } else {
-        saveMessage.value = '已保存'
+        saveMessage.value = '已保存，守护进程已重启'
       }
     }
   } catch (e) { saveMessage.value = '错误'; saveError.value = true }
