@@ -21,8 +21,17 @@
             <div class="setting-item-label">当前版本</div>
             <span class="text-sm">
               {{ state.binVersion || '未安装' }}
-              <span v-if="bundle.custom" class="badge badge-xs badge-warning badge-outline ml-1">自定义</span>
+              <span v-if="bundle.custom" class="badge badge-xs badge-warning badge-outline ml-1">外置</span>
             </span>
+          </div>
+          <div class="setting-item">
+            <div class="setting-item-label">当前来源</div>
+            <div class="flex flex-col">
+              <span class="text-sm">{{ sourceLabel }}</span>
+              <span class="text-xs text-base-content/40 break-all mt-0.5">
+                {{ state.exePath || (state.binInstalled ? DAEMON : '—') }}
+              </span>
+            </div>
           </div>
           <div class="setting-item">
             <div class="setting-item-label">离线包</div>
@@ -89,9 +98,9 @@
         </div>
       </div>
 
-      <!-- Custom (self-built) binaries -->
+      <!-- External (self-built) binaries -->
       <div>
-        <div class="settings-section-label">自定义二进制</div>
+        <div class="settings-section-label">外置二进制</div>
         <div class="settings-grid">
           <div class="setting-item">
             <div class="setting-item-label">守护进程路径</div>
@@ -117,7 +126,7 @@
             />
           </div>
           <div class="setting-item justify-end gap-2 flex-wrap">
-            <span class="text-xs text-base-content/40">自建版本不会被模块更新覆盖</span>
+            <span class="text-xs text-base-content/40">外置版本不会被模块更新覆盖</span>
             <button class="btn btn-ghost btn-sm" :disabled="scanning || installing" @click="scanBinaries">
               {{ scanning ? '扫描中…' : '扫描设备文件' }}
             </button>
@@ -126,7 +135,14 @@
               :disabled="installing || !customDaemon.trim()"
               @click="installCustom"
             >
-              安装自定义
+              {{ bundle.custom ? '重新切换为外置' : '切换为外置' }}
+            </button>
+            <button
+              class="btn btn-ghost btn-error btn-sm"
+              :disabled="installing || !bundle.custom"
+              @click="deleteCustom"
+            >
+              删除外置
             </button>
           </div>
           <div v-if="candidates.length" class="flex flex-wrap gap-1 px-3 pt-1 pb-2">
@@ -142,7 +158,7 @@
             </button>
           </div>
           <div v-if="bundle.customSrc" class="setting-item">
-            <div class="setting-item-label">当前来源</div>
+            <div class="setting-item-label">来源文件</div>
             <span class="text-xs text-base-content/50 break-all">{{ bundle.customSrc }}</span>
           </div>
         </div>
@@ -179,9 +195,10 @@
 </template>
 
 <script setup lang="ts">
-import { useKsu, TS_DIR, MODDIR, PIDFILE } from '@/composables/useKsu'
+import { useKsu, TS_DIR, MODDIR, PIDFILE, DAEMON } from '@/composables/useKsu'
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
 import { usePaddingForViews } from '@/composables/paddingViews'
+import { showConfirmDialog } from '@/helper/confirmDialog'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 
@@ -235,9 +252,16 @@ const hasUpdate = computed(() => {
 const bundleLabel = computed(() => {
   if (installing.value) return '安装中…'
   if (!bundle.value.available) return '无离线包'
-  if (!state.value.binInstalled) return '安装内置'
+  if (!state.value.binInstalled) return '使用内置'
+  // 外置（自定义/在线装的）也算"需要切回来"，否则标签会显示成"重装内置"
+  if (bundle.value.custom) return '切换到内置'
   if (bundle.value.version && state.value.binVersion !== bundle.value.version) return '切换到内置'
   return '重装内置'
+})
+
+const sourceLabel = computed(() => {
+  if (!state.value.binInstalled) return '未安装'
+  return bundle.value.custom ? '外置（自定义/在线安装）' : '内置（离线包）'
 })
 
 const displayLog = computed(() =>
@@ -308,6 +332,28 @@ const installCustom = async () => {
     } else {
       pushLog('✗ 安装失败')
     }
+  } finally {
+    installing.value = false
+    loadBundle()
+  }
+}
+
+const deleteCustom = async () => {
+  if (installing.value || !bundle.value.custom) return
+  const ok = await showConfirmDialog(
+    '删除外置二进制',
+    '将停止守护进程、删除外置副本与标记；来源文件若在 /sdcard 等外置存储上也会一并删除。模块带内置包时会自动回滚到内置版本。',
+  )
+  if (!ok) return
+  installing.value = true
+  installLog.value = []
+  try {
+    // 脚本内部已负责停 daemon -> 删副本 -> 回滚内置 -> 重启，这里不再重复调 service.sh
+    const r = await exec(`sh ${MODDIR}/install_custom.sh --delete 2>&1`)
+    pushLog(r.stdout + '\n' + r.stderr)
+    if (r.errno !== 0) pushLog('✗ 删除失败')
+    state.value.binInstalled = false
+    await refresh()
   } finally {
     installing.value = false
     loadBundle()

@@ -139,6 +139,10 @@
             <div class="setting-item-label">版本</div>
             <span class="text-sm">{{ state.binVersion }}</span>
           </div>
+          <div v-if="state.exePath" class="setting-item">
+            <div class="setting-item-label">二进制路径</div>
+            <span class="text-xs text-base-content/50 break-all">{{ state.exePath }}</span>
+          </div>
         </div>
       </div>
 

@@ -3,6 +3,7 @@
 #   sh install_custom.sh /sdcard/Download/tailscaled
 #   sh install_custom.sh /sdcard/Download/ts/            # dir with tailscaled [+ tailscale]
 #   sh install_custom.sh /sdcard/Download/tailscaled --cli /sdcard/Download/tailscale
+#   sh install_custom.sh --delete                        # 删除外置安装，回滚内置
 # Custom binaries are adopted as "user managed": the module never overwrites them
 # on boot, and "安装内置" in the WebUI restores the bundled build.
 TS_DIR=/data/adb/tailscale
@@ -10,14 +11,73 @@ MODDIR=${0%/*}
 BIN_DIR="$TS_DIR/bin"
 SRC=""
 CLI_SRC=""
+DEL=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --cli) shift; CLI_SRC="$1" ;;
-    *)     [ -z "$SRC" ] && SRC="$1" ;;
+    --cli)    shift; CLI_SRC="$1" ;;
+    --delete) DEL=1 ;;
+    *)        [ -z "$SRC" ] && SRC="$1" ;;
   esac
   shift
 done
+
+# ---- 删除外置安装 ----------------------------------------------------------
+# 外置/自定义安装是"用户自管"的：模块不会覆盖它，但也没有别的入口把它去掉。
+# 这里统一处理：停 daemon → 删掉 bin 下的外置副本与标记 → 有内置包就回滚，
+# 顺带清掉留在外置存储上的来源文件（那是用户最想删的，安装时只被复制了一份）。
+if [ "$DEL" = "1" ]; then
+  if [ ! -f "$BIN_DIR/.custom" ]; then
+    echo "✗ 当前不是外置安装，无需删除"
+    exit 0
+  fi
+  SRC_FILE=$(sed -n 's/^src=//p' "$BIN_DIR/.custom" 2>/dev/null | head -1)
+  CLI_FILE=$(sed -n 's/^cli=//p' "$BIN_DIR/.custom" 2>/dev/null | head -1)
+
+  if pgrep -x tailscaled >/dev/null 2>&1; then
+    echo "停止 tailscaled…"
+    pkill -x tailscaled 2>/dev/null
+    i=0
+    while pgrep -x tailscaled >/dev/null 2>&1 && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
+  fi
+  rm -f "$TS_DIR/sock" "$TS_DIR/tailscaled.pid"
+
+  rm -f "$BIN_DIR/tailscaled" "$BIN_DIR/.custom"
+  # CLI 只在当初确实被外置 CLI 替换过时才删，否则它可能还是内置那份
+  [ -n "$CLI_FILE" ] && rm -f "$BIN_DIR/tailscale"
+  echo "✓ 已删除外置二进制副本"
+
+  # 来源文件只在外置存储/临时目录里删；模块目录、系统路径一律不动
+  purge_src() {
+    case "$1" in
+      "") : ;;
+      /sdcard/*|/storage/*|/mnt/media_rw/*|/mnt/user/*|/data/local/tmp/*)
+        if [ -f "$1" ]; then
+          rm -f "$1" && echo "✓ 已删除来源文件 $1"
+        else
+          echo "· 来源文件已不存在：$1"
+        fi
+        ;;
+      *) echo "· 来源文件不在可删除范围，保留：$1" ;;
+    esac
+  }
+  purge_src "$SRC_FILE"
+  purge_src "$CLI_FILE"
+
+  # 删完不能留成"未安装"：模块带内置包就直接回滚，否则提示重新安装
+  if [ -f "$MODDIR/install_bins.sh" ]; then
+    OUT=$(sh "$MODDIR/install_bins.sh" --force 2>&1)
+    if [ $? -eq 0 ]; then
+      echo "$OUT"
+      echo "✓ 已回滚到内置版本"
+      TS_SKIP_WAIT=1 sh "$MODDIR/service.sh" >/dev/null 2>&1
+      echo "✓ 守护进程已重启"
+      exit 0
+    fi
+  fi
+  echo "✗ 回滚失败（当前安装包可能不含内置二进制），请在安装页重新安装"
+  exit 3
+fi
 
 if [ -z "$SRC" ]; then
   echo "✗ 用法: install_custom.sh <tailscaled 路径|目录> [--cli <tailscale 路径>]"
@@ -130,6 +190,8 @@ fi
 rm -f "$BIN_DIR/.managed_version"
 {
   echo "src=$(printf '%s' "$SRC_ORIG")"
+  # 记下是否替换过 CLI，--delete 时只删被替换过的那份
+  [ -n "$CLI_SRC" ] && echo "cli=$(printf '%s' "$CLI_SRC")"
   echo "time=$(date '+%F %T')"
 } > "$BIN_DIR/.custom"
 [ -n "$CLEANUP_DIR" ] && rm -rf "$CLEANUP_DIR"

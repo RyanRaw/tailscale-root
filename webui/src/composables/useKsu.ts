@@ -49,6 +49,8 @@ export interface TailscaleState {
   daemonRunning: boolean
   pid: number
   etime: string
+  // 正在跑的 tailscaled 真实可执行文件路径（可能来自外置/自定义安装）
+  exePath: string
   svm: string
   guardOn: boolean
   guardPid: number
@@ -64,7 +66,7 @@ export interface TailscaleState {
 // 节点页会显示出不同的在线数。
 const state = ref<TailscaleState>({
   binInstalled: false, binVersion: '',
-  daemonRunning: false, pid: 0, etime: '',
+  daemonRunning: false, pid: 0, etime: '', exePath: '',
   svm: '?', guardOn: false, guardPid: 0,
   box: false, status: null, authURL: '', loaded: false,
 })
@@ -91,6 +93,8 @@ async function refresh() {
       'p=$(pidof tailscaled | head -1)',
       'echo PID=$p',
       '[ -n "$p" ] && echo ETIME=$(ps -o etime= -p $p 2>/dev/null | sed "s/ //g")',
+      // 真实运行路径来自 /proc/<pid>/exe，能反映外置/自定义安装
+      'echo EXE=$(readlink /proc/$p/exe 2>/dev/null)',
       'echo SVM=$(cat ' + SVM + ' 2>/dev/null)',
       'gp=$(cat ' + GUARD_PIDFILE + ' 2>/dev/null)',
       'if [ -n "$gp" ] && kill -0 "$gp" 2>/dev/null; then echo GUARD=$gp; else echo GUARD=; fi',
@@ -102,6 +106,7 @@ async function refresh() {
     state.value.pid = parseInt(kv.PID) || 0
     state.value.daemonRunning = state.value.pid > 0
     state.value.etime = kv.ETIME || ''
+    state.value.exePath = kv.EXE || ''
     state.value.svm = kv.SVM || '?'
     state.value.guardPid = parseInt(kv.GUARD) || 0
     state.value.guardOn = state.value.guardPid > 0
