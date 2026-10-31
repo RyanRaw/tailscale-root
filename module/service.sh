@@ -20,25 +20,30 @@ ensure_svm_guard() {
     </dev/null >"$TS_DIR/log/svm_guard.out" 2>&1 &
 }
 
-# Update module description in background (every 30s).
-# /data/host is refreshed by ts_netwatch.sh on netlink route/address events;
-# this loop only keeps a slow safety net (every 60 rounds ≈ 30 min) in case the
-# watcher dies and the file would otherwise keep a stale address forever.
-(
-  sleep 8
-  n=0
-  while true; do
-    sh "$MODDIR/update_desc.sh"
-    ensure_svm_guard
-    n=$((n + 1))
-    [ $((n % 60)) -eq 0 ] && sh "$MODDIR/ts_hosts.sh" --hosts >/dev/null 2>&1
-    sleep 30
-  done
-) </dev/null >/dev/null 2>&1 &
+# 后台守护只在首次启动挂一次。换控制面后本脚本会以 TS_RESTART_ONLY=1 再跑一次
+# 用来重启 daemon（见下面的控制面分支），那时这些循环已经在跑，重复挂只会多出
+# 几份 update_desc / net_probe 循环。
+if [ -z "$TS_RESTART_ONLY" ]; then
+  # Update module description in background (every 30s).
+  # /data/host is refreshed by ts_netwatch.sh on netlink route/address events;
+  # this loop only keeps a slow safety net (every 60 rounds ≈ 30 min) in case the
+  # watcher dies and the file would otherwise keep a stale address forever.
+  (
+    sleep 8
+    n=0
+    while true; do
+      sh "$MODDIR/update_desc.sh"
+      ensure_svm_guard
+      n=$((n + 1))
+      [ $((n % 60)) -eq 0 ] && sh "$MODDIR/ts_hosts.sh" --hosts >/dev/null 2>&1
+      sleep 30
+    done
+  ) </dev/null >/dev/null 2>&1 &
 
-# Event driven re-resolve: netlink tells us the moment the uplink changes.
-if ! pgrep -f "$MODDIR/ts_netwatch.sh" >/dev/null 2>&1; then
-  nohup sh "$MODDIR/ts_netwatch.sh" </dev/null >/dev/null 2>&1 &
+  # Event driven re-resolve: netlink tells us the moment the uplink changes.
+  if ! pgrep -f "$MODDIR/ts_netwatch.sh" >/dev/null 2>&1; then
+    nohup sh "$MODDIR/ts_netwatch.sh" </dev/null >/dev/null 2>&1 &
+  fi
 fi
 
 # ---- user config (/data/adb/tailscale/env) ----
@@ -135,19 +140,43 @@ nohup "$TS_DAEMON" \
   < /dev/null >> "$DAEMON_LOG" 2>&1 &
 echo $! > "$PIDFILE"
 
-# Pre-auth key configured: register automatically when the node still needs a login.
-if [ -n "$TS_AUTHKEY" ]; then
-  (
+# Control plane + auto login, in one place so the two cases can't race:
+#   1. env 期望的控制面和 prefs 里存的不一致（典型：清空自建地址想切回官方）→
+#      必须走 ts_up.sh（它会带 --reset --force-reauth）。只重启 daemon 是不够的：
+#      `tailscale up` 不带 --login-server 会继续沿用 prefs 里的旧 ControlURL。
+#   2. 一致且配了预授权 key、节点还没登录 → 自动注册。
+[ -n "$TS_RESTART_ONLY" ] || (
+  i=0
+  while [ $i -lt 15 ] && [ ! -S "$TS_DIR/sock" ]; do sleep 1; i=$((i+1)); done
+  [ -S "$TS_DIR/sock" ] || exit 0
+  desired="${TS_LOGIN_SERVER:-https://controlplane.tailscale.com}"
+  # IPC 会挂：daemon 刚被 timeout 掉/正在换控制面时 status 类请求可能一直不回
+  cur=$(timeout 10 sh "$MODDIR/ts_up.sh" --current 2>/dev/null)
+  # 空 = 读不到（IPC 卡住/daemon 刚起），本次不切，下轮重启再说
+  if [ -n "$cur" ] && [ "$cur" != "$desired" ]; then
+    echo "[control] $cur -> $desired" >>"$TS_DIR/log/up.log"
+    # 换控制面后 up 会一直等交互登录，不能让它常驻：实测它会把 daemon 的状态接口
+    # 卡死（status / route_guard / WebUI 全部阻塞）。25 秒拿到 AuthURL 就杀掉。
+    timeout 25 sh "$MODDIR/ts_up.sh" >>"$TS_DIR/log/up.log" 2>&1
+    # prefs 此时已落盘为新控制面，重启 daemon 既是解卡，也让它在 NeedsLogin 状态
+    # 下重新生成 AuthURL —— WebUI 才有登录链接可显示。
+    op=$(cat "$PIDFILE" 2>/dev/null)
+    [ -n "$op" ] && kill "$op" 2>/dev/null
     i=0
-    while [ $i -lt 15 ] && [ ! -S "$TS_DIR/sock" ]; do sleep 1; i=$((i+1)); done
-    [ -S "$TS_DIR/sock" ] || exit 0
-    bs=$("$TS_DIR/bin/tailscale" --socket="$TS_DIR/sock" status --json 2>/dev/null \
-         | grep -o '"BackendState": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"//')
-    case "$bs" in
-      NeedsLogin|NoState|"") sh "$MODDIR/ts_up.sh" >>"$TS_DIR/log/up.log" 2>&1 ;;
-    esac
-  ) </dev/null >/dev/null 2>&1 &
-fi
+    while [ $i -lt 10 ] && [ -n "$op" ] && kill -0 "$op" 2>/dev/null; do sleep 1; i=$((i+1)); done
+    [ -n "$op" ] && kill -9 "$op" 2>/dev/null
+    rm -f "$TS_DIR/sock" "$PIDFILE"
+    TS_SKIP_WAIT=1 TS_RESTART_ONLY=1 \
+      nohup sh "$MODDIR/service.sh" </dev/null >/dev/null 2>&1 &
+    exit 0
+  fi
+  [ -n "$TS_AUTHKEY" ] || exit 0
+  bs=$(timeout 10 "$TS_DIR/bin/tailscale" --socket="$TS_DIR/sock" status --json 2>/dev/null \
+       | grep -o '"BackendState": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"//')
+  case "$bs" in
+    NeedsLogin|NoState|"") timeout 25 sh "$MODDIR/ts_up.sh" >>"$TS_DIR/log/up.log" 2>&1 ;;
+  esac
+) </dev/null >/dev/null 2>&1 &
 
 # Post-start burst: squash src_valid_mark=1 within 1s for the first minute
 ( i=0; while [ $i -lt 60 ]; do
