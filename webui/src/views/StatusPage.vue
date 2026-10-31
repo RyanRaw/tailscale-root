@@ -89,18 +89,29 @@
 
       <!-- Browser picker：安卓的默认浏览器是全局偏好，这里给一次选择机会 -->
       <DialogWrapper v-model="browserOpen" title="选择浏览器打开">
-        <div class="flex flex-col gap-1">
+        <div class="flex flex-wrap items-start justify-center gap-4 py-2">
           <button
             v-for="b in browserList"
             :key="b.pkg"
-            class="btn btn-ghost btn-sm justify-start normal-case"
+            class="flex flex-col items-center outline-none"
+            :title="b.label + ' / ' + b.pkg"
             @click="openWith(b.pkg)"
           >
-            <span class="text-sm">{{ b.label }}</span>
-            <span v-if="b.label !== b.pkg" class="text-base-content/40 ml-2 text-xs">{{ b.pkg }}</span>
+            <span
+              class="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-semibold text-white shadow-sm transition-transform active:scale-95"
+              :style="{ background: b.color }"
+            >{{ b.initial }}</span>
           </button>
-          <button class="btn btn-ghost btn-sm justify-start normal-case" @click="openWith()">
-            系统默认（不指定应用）
+          <button
+            class="flex flex-col items-center outline-none"
+            title="系统默认（不指定应用）"
+            @click="openWith()"
+          >
+            <span
+              class="bg-base-200 text-base-content/60 flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm transition-transform active:scale-95"
+            >
+              <GlobeAltIcon class="h-7 w-7" />
+            </span>
           </button>
         </div>
       </DialogWrapper>
@@ -220,8 +231,8 @@ import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
-import { listBrowsers, openUrl } from '@/helper/browser'
-import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
+import { listBrowsers, openUrl, type BrowserApp } from '@/helper/browser'
+import { EyeIcon, EyeSlashIcon, GlobeAltIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
@@ -340,7 +351,7 @@ function restartDaemon() {
 // KSU 的 WebView 里 window.open 不会落到系统浏览器，只能让 shell 用 am 拉起。
 // 多个浏览器时先弹选择（安卓的默认浏览器是全局偏好，这里不替用户改）。
 const browserOpen = ref(false)
-const browserList = ref<{ pkg: string; label: string }[]>([])
+const browserList = ref<BrowserApp[]>([])
 const pendingUrl = ref('')
 
 async function openAuthUrl(url: string) {
