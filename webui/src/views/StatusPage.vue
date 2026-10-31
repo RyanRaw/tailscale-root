@@ -81,40 +81,11 @@
           <div class="flex items-center gap-2">
             <span class="text-base-content/40 text-xs">点击链接可复制</span>
             <button class="btn btn-primary btn-sm ml-auto" @click="openAuthUrl(state.authURL)">
-              选择浏览器打开
+              用浏览器打开
             </button>
           </div>
         </div>
       </div>
-
-      <!-- Browser picker：安卓的默认浏览器是全局偏好，这里给一次选择机会 -->
-      <DialogWrapper v-model="browserOpen" title="选择浏览器打开">
-        <div class="flex flex-wrap items-start justify-center gap-4 py-2">
-          <button
-            v-for="b in browserList"
-            :key="b.pkg"
-            class="flex flex-col items-center outline-none"
-            :title="b.label + ' / ' + b.pkg"
-            @click="openWith(b.pkg)"
-          >
-            <span
-              class="flex h-14 w-14 items-center justify-center rounded-2xl text-xl font-semibold text-white shadow-sm transition-transform active:scale-95"
-              :style="{ background: b.color }"
-            >{{ b.initial }}</span>
-          </button>
-          <button
-            class="flex flex-col items-center outline-none"
-            title="系统默认（不指定应用）"
-            @click="openWith()"
-          >
-            <span
-              class="bg-base-200 text-base-content/60 flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm transition-transform active:scale-95"
-            >
-              <GlobeAltIcon class="h-7 w-7" />
-            </span>
-          </button>
-        </div>
-      </DialogWrapper>
 
       <!-- Up / login failure -->
       <div v-if="upError" class="base-container">
@@ -227,12 +198,10 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
-import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
-import { listBrowsers, openUrl, type BrowserApp } from '@/helper/browser'
-import { EyeIcon, EyeSlashIcon, GlobeAltIcon } from '@heroicons/vue/24/outline'
+import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const { padding } = usePaddingForViews({ offsetTop: 0, offsetBottom: 8 })
@@ -349,29 +318,16 @@ function restartDaemon() {
   })
 }
 // KSU 的 WebView 里 window.open 不会落到系统浏览器，只能让 shell 用 am 拉起。
-// 多个浏览器时先弹选择（安卓的默认浏览器是全局偏好，这里不替用户改）。
-const browserOpen = ref(false)
-const browserList = ref<BrowserApp[]>([])
-const pendingUrl = ref('')
-
+// 不指定包名 = 走用户设置的默认浏览器（要换成"每次询问"由系统决定，在系统设置里改）。
 async function openAuthUrl(url: string) {
   if (!url) return
-  const list = await listBrowsers()
-  if (list.length <= 1) {
-    await openUrl(url, list[0]?.pkg)
-    return
-  }
-  browserList.value = list
-  pendingUrl.value = url
-  browserOpen.value = true
-}
-
-async function openWith(pkg?: string) {
-  browserOpen.value = false
-  const u = pendingUrl.value
-  pendingUrl.value = ''
-  if (!u) return
-  await openUrl(u, pkg)
+  const u = url.replace(/'/g, '')
+  const cu = await exec('am get-current-user 2>/dev/null')
+  const user = cu.stdout.trim() || '0'
+  await exec(
+    `am start --user ${user} -a android.intent.action.VIEW -d '${u}' >/dev/null 2>&1 ` +
+    `|| cmd activity start --user ${user} -a android.intent.action.VIEW -d '${u}' >/dev/null 2>&1`,
+  )
 }
 
 function tsUp() {
