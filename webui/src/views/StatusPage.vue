@@ -78,9 +78,32 @@
             class="text-primary cursor-pointer break-all text-sm"
             @click="copyText(state.authURL)"
           >{{ state.authURL }}</div>
-          <div class="text-base-content/40 text-xs">点击链接可复制</div>
+          <div class="flex items-center gap-2">
+            <span class="text-base-content/40 text-xs">点击链接可复制</span>
+            <button class="btn btn-primary btn-sm ml-auto" @click="openAuthUrl(state.authURL)">
+              选择浏览器打开
+            </button>
+          </div>
         </div>
       </div>
+
+      <!-- Browser picker：安卓的默认浏览器是全局偏好，这里给一次选择机会 -->
+      <DialogWrapper v-model="browserOpen" title="选择浏览器打开">
+        <div class="flex flex-col gap-1">
+          <button
+            v-for="b in browserList"
+            :key="b.pkg"
+            class="btn btn-ghost btn-sm justify-start normal-case"
+            @click="openWith(b.pkg)"
+          >
+            <span class="text-sm">{{ b.label }}</span>
+            <span v-if="b.label !== b.pkg" class="text-base-content/40 ml-2 text-xs">{{ b.pkg }}</span>
+          </button>
+          <button class="btn btn-ghost btn-sm justify-start normal-case" @click="openWith()">
+            系统默认（不指定应用）
+          </button>
+        </div>
+      </DialogWrapper>
 
       <!-- Up / login failure -->
       <div v-if="upError" class="base-container">
@@ -193,9 +216,11 @@
 
 <script setup lang="ts">
 import CtrlsBar from '@/components/common/CtrlsBar.vue'
+import DialogWrapper from '@/components/common/DialogWrapper.vue'
 import { useKsu, BIN, SOCK, PIDFILE, UP_LOG, MODDIR, TS_DIR, AUTH_URL_RE } from '@/composables/useKsu'
 import { usePaddingForViews } from '@/composables/paddingViews'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import { listBrowsers, openUrl } from '@/helper/browser'
 import { EyeIcon, EyeSlashIcon } from '@heroicons/vue/24/outline'
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -312,6 +337,32 @@ function restartDaemon() {
     }
   })
 }
+// KSU 的 WebView 里 window.open 不会落到系统浏览器，只能让 shell 用 am 拉起。
+// 多个浏览器时先弹选择（安卓的默认浏览器是全局偏好，这里不替用户改）。
+const browserOpen = ref(false)
+const browserList = ref<{ pkg: string; label: string }[]>([])
+const pendingUrl = ref('')
+
+async function openAuthUrl(url: string) {
+  if (!url) return
+  const list = await listBrowsers()
+  if (list.length <= 1) {
+    await openUrl(url, list[0]?.pkg)
+    return
+  }
+  browserList.value = list
+  pendingUrl.value = url
+  browserOpen.value = true
+}
+
+async function openWith(pkg?: string) {
+  browserOpen.value = false
+  const u = pendingUrl.value
+  pendingUrl.value = ''
+  if (!u) return
+  await openUrl(u, pkg)
+}
+
 function tsUp() {
   act(async () => {
     upError.value = ''
@@ -322,11 +373,18 @@ function tsUp() {
       const m = log.stdout.match(AUTH_URL_RE)
       if (m) {
         state.value.authURL = m[0]
+        await openAuthUrl(m[0])
         startLoginPoll()
         return
       }
       await refresh()
       if (isOnline.value) return
+    }
+    // up 没打印新链接时用状态里已有的（换控制面后 daemon 可能早就生成了）
+    if (state.value.authURL) {
+      await openAuthUrl(state.value.authURL)
+      startLoginPoll()
+      return
     }
     const tail = await exec(`tail -6 ${UP_LOG} 2>/dev/null`)
     upError.value = tail.stdout.trim() || '没有拿到登录链接，请检查控制服务器设置与网络'
