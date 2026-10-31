@@ -22,7 +22,8 @@ current_control() {
   # 读不到就返回空。调用方把空当"未知"：宁可这次不切，也不要在误判时用
   # --reset 把登录态清掉（状态文件里的 ControlURL 是 base64 编码的 profile，
   # 多 profile 时按它取会取错，所以不做那层兜底）。
-  "$TS_DIR/bin/tailscale" --socket="$SOCK" debug prefs 2>/dev/null \
+  # localapi 卡住时 debug prefs 同样不返回，读不到就当"未知"处理
+  timeout 8 "$TS_DIR/bin/tailscale" --socket="$SOCK" debug prefs 2>/dev/null \
     | sed -n 's/.*"ControlURL"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
 }
 

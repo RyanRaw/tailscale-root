@@ -42,11 +42,11 @@ else
   # backend auto-reconnects (WantRunning persisted); give it a moment
   i=0
   while [ $i -lt 12 ]; do
-    bs=$($TS status --json 2>/dev/null | grep -o '"BackendState": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"//')
+    bs=$(timeout 4 $TS status --json 2>/dev/null | grep -o '"BackendState": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"//')
     [ "$bs" = "Running" ] && break
     sleep 1; i=$((i+1))
   done
-  ip4=$($TS ip -4 2>/dev/null | head -1)
+  ip4=$(timeout 4 $TS ip -4 2>/dev/null | head -1)
   echo ""
   if [ "$bs" = "Running" ]; then
     echo "● Tailscale ONLINE"

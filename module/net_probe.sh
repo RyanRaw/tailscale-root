@@ -31,7 +31,8 @@ fi
 echo "$now" > "$stamp_file" 2>/dev/null
 
 ts_state() {
-  printf '%s' "$("$TS_DIR/bin/tailscale" --socket="$SOCK" status --json --peers=false 2>/dev/null \
+  # 同上：localapi 卡住时 status 会一直不返回，采集快照不能跟着卡死
+  printf '%s' "$(timeout 8 "$TS_DIR/bin/tailscale" --socket="$SOCK" status --json --peers=false 2>/dev/null \
     | grep -o '"BackendState": *"[^"]*"' | head -1 | sed 's/.*: *"//; s/"//')"
 }
 

@@ -17,6 +17,14 @@ TS=$TS_DIR/bin/tailscale
 LOG=$TS_DIR/log/route_guard.log
 MARK=$TS_DIR/.accept_routes_auto
 
+# localapi 在控制面 long-poll 断开后会整体卡住（status / prefs 全都不返回）。
+# 这些调用一律过 timeout：单个卡住的 CLI 足以把这个 30s 循环永久钉死，
+# 而且每轮再堆一个挂死的进程，最后连 WebUI 都跟着转圈。
+# set 要落盘 prefs，给的时间比只读查询宽一点。
+TS_CLI_TIMEOUT=8
+TS_SET_TIMEOUT=12
+tsq() { timeout "$TS_CLI_TIMEOUT" "$TS" --socket="$SOCK" "$@"; }
+
 [ -S "$SOCK" ] || exit 0
 
 # 开关：默认开启（只有显式写 0 才关闭）
@@ -27,7 +35,7 @@ if [ "$TS_ROUTE_GUARD" = "0" ]; then
   # 关掉自动避让时把之前自动关掉的 accept-routes 还原，
   # 否则会一直停留在 false，访问不了对端子网。
   if [ -f "$MARK" ]; then
-    if "$TS" --socket="$SOCK" set --accept-routes=true >/dev/null 2>&1; then
+    if timeout "$TS_SET_TIMEOUT" "$TS" --socket="$SOCK" set --accept-routes=true >/dev/null 2>&1; then
       echo "$(date '+%F %T') route guard disabled -> accept-routes=true" >>"$LOG"
       rm -f "$MARK"
     fi
@@ -35,7 +43,7 @@ if [ "$TS_ROUTE_GUARD" = "0" ]; then
   exit 0
 fi
 
-status=$("$TS" --socket="$SOCK" status --json 2>/dev/null) || exit 0
+status=$(tsq status --json 2>/dev/null) || exit 0
 [ -n "$status" ] || exit 0
 
 # 对端 advertise 的子网：PrimaryRoutes 是字符串数组，按块提取，
@@ -71,18 +79,18 @@ overlap=$(printf '%s\n' "$addrs" | awk -v nets="$nets" '
     }
   }')
 
-cur=$("$TS" --socket="$SOCK" debug prefs 2>/dev/null \
+cur=$(tsq debug prefs 2>/dev/null \
   | grep -o '"RouteAll": *[a-z]*' | awk '{print $2}')
 
 if [ "$overlap" = "1" ]; then
   if [ "$cur" = "true" ]; then
-    if "$TS" --socket="$SOCK" set --accept-routes=false >/dev/null 2>&1; then
+    if timeout "$TS_SET_TIMEOUT" "$TS" --socket="$SOCK" set --accept-routes=false >/dev/null 2>&1; then
       echo "$(date '+%F %T') local net overlaps advertised route -> accept-routes=false" >>"$LOG"
       echo 1 >"$MARK"
     fi
   fi
 elif [ "$cur" = "false" ] && [ -f "$MARK" ]; then
-  if "$TS" --socket="$SOCK" set --accept-routes=true >/dev/null 2>&1; then
+  if timeout "$TS_SET_TIMEOUT" "$TS" --socket="$SOCK" set --accept-routes=true >/dev/null 2>&1; then
     echo "$(date '+%F %T') no overlap -> accept-routes=true" >>"$LOG"
     rm -f "$MARK"
   fi
