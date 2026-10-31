@@ -68,10 +68,21 @@ domain_of() {
   printf '%s' "$1" | sed -e 's|^[A-Za-z][A-Za-z0-9+.-]*://||' -e 's|/.*$||' -e 's|:.*$||'
 }
 
+# 从 ping 首行取地址。只认第一个括号：输出形如 "PING host (1.2.3.4) 56(84) bytes"，
+# 贪婪匹配会捞到 (84)。地址形态不确定：AAAA 优先时括号里是 "2606:4700::1"，
+# 只匹配点分四段的正则会取到空值，所以统一按"到右括号为止"取。
+addr_from_ping() {
+  sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' | head -1
+}
+
 # 借 bionic 的解析结果：ping 会先 getaddrinfo，即使 ICMP 不通也会打印 IP。
-# 只认第一个括号：输出形如 "PING host (1.2.3.4) 56(84) bytes"，贪婪匹配会捞到 (84)
+# 先试 -4：hosts 是"命中即终止"的，写进去一条 v6 而链路只有 v4 时，Go 会连
+# v6 失败且不再回退查 DNS，比不写还糟。老版本 toybox ping 不认 -4，会直接
+# 报用法错误，此时退回不带参数（getaddrinfo 首选族）再按通用形态取一次。
 resolve_bionic() {
-  ping -c 1 -W 2 "$1" 2>/dev/null | sed -n '1s/^[^(]*(\([0-9][0-9.]*\)).*/\1/p' | head -1
+  a=$(ping -4 -c 1 -W 2 "$1" 2>/dev/null | addr_from_ping)
+  [ -n "$a" ] && { printf '%s\n' "$a"; return 0; }
+  ping -c 1 -W 2 "$1" 2>/dev/null | addr_from_ping
 }
 
 gen_hosts() {
@@ -85,10 +96,15 @@ gen_hosts() {
     echo "::1 ip6-localhost"
     if [ -n "$mine" ]; then
       ip=$(resolve_bionic "$mine")
+      if [ -z "$ip" ]; then
+        # 解析失败（移动网络抖动很常见）不能把上次可用的 IP 抹掉，
+        # 否则下次重连会拿着空 hosts 落回那个必败的 DoH 兜底
+        # 老条目可能是 v6（点分四段的正则匹配不到），按"第一个字段"取即可
+        ip=$(sed -n "s|^\([^ ][^ ]*\) $mine\$|\1|p" "$HOSTS" 2>/dev/null | head -1)
+      fi
       if [ -n "$ip" ]; then
         echo "$ip $mine"
       else
-        # 解析不到就别写死，留给 tailscale 自己的 DoH 兜底
         echo "# $mine unresolved at $(date '+%F %T')"
       fi
     fi

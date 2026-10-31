@@ -21,8 +21,9 @@ ensure_svm_guard() {
 }
 
 # Update module description in background (every 30s).
-# Every 20 rounds (~10 min) re-resolve the control server: /data/host holds a
-# literal address, so a DNS change or a roaming IP would otherwise go stale.
+# /data/host is refreshed by ts_netwatch.sh on netlink route/address events;
+# this loop only keeps a slow safety net (every 60 rounds ≈ 30 min) in case the
+# watcher dies and the file would otherwise keep a stale address forever.
 (
   sleep 8
   n=0
@@ -30,10 +31,15 @@ ensure_svm_guard() {
     sh "$MODDIR/update_desc.sh"
     ensure_svm_guard
     n=$((n + 1))
-    [ $((n % 20)) -eq 0 ] && sh "$MODDIR/ts_hosts.sh" --hosts >/dev/null 2>&1
+    [ $((n % 60)) -eq 0 ] && sh "$MODDIR/ts_hosts.sh" --hosts >/dev/null 2>&1
     sleep 30
   done
 ) </dev/null >/dev/null 2>&1 &
+
+# Event driven re-resolve: netlink tells us the moment the uplink changes.
+if ! pgrep -f "$MODDIR/ts_netwatch.sh" >/dev/null 2>&1; then
+  nohup sh "$MODDIR/ts_netwatch.sh" </dev/null >/dev/null 2>&1 &
+fi
 
 # ---- user config (/data/adb/tailscale/env) ----
 TS_PROXY=""; TS_PORT="41641"; TS_HOSTNAME=""; TS_TUN="tailscale0"; TS_EXTRA_ARGS=""
