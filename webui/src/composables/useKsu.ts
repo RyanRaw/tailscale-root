@@ -49,7 +49,7 @@ export interface TailscaleState {
   daemonRunning: boolean
   pid: number
   etime: string
-  // 正在跑的 tailscaled 真实可执行文件路径（可能来自外置/自定义安装）
+  // 正在跑的 tailscaled 真实可执行文件路径
   exePath: string
   svm: string
   guardOn: boolean
@@ -93,7 +93,7 @@ async function refresh() {
       'p=$(pidof tailscaled | head -1)',
       'echo PID=$p',
       '[ -n "$p" ] && echo ETIME=$(ps -o etime= -p $p 2>/dev/null | sed "s/ //g")',
-      // 真实运行路径来自 /proc/<pid>/exe，能反映外置/自定义安装
+      // 真实运行路径来自 /proc/<pid>/exe
       'echo EXE=$(readlink /proc/$p/exe 2>/dev/null)',
       'echo SVM=$(cat ' + SVM + ' 2>/dev/null)',
       'gp=$(cat ' + GUARD_PIDFILE + ' 2>/dev/null)',

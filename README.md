@@ -5,8 +5,8 @@
 ## 特性
 
 - **Root 守护进程**：`tailscaled` 直接以 root 运行，不占用系统 VPN 服务槽位
-- **内置二进制**：官方 `tailscale` / `tailscaled`（arm64）随模块打包，开机自动部署，安装与升级全程离线
-- **自建二进制**：可装入自己编译或第三方的 `tailscaled`，模块升级不会覆盖它
+- **单一版本**：模块只维护 `bin/` 里那一份 `tailscale` / `tailscaled`。离线包（arm64 官方二进制）只在你还没有二进制时兜底部署；在线更新、指定版本、本地文件三个入口都装到同一个位置，装完开机也不会被离线包顶回去
+- **指定版本即锁定**：明确指定过版本（指定版本号 / 自定义 URL / 本地文件）就把它锁定，"更新到最新"不会覆盖，除非你显式解锁
 - **WebUI**：从 KernelSU 管理器直接打开
   - 状态总览（连接状态、账号、节点数、运行时长）
   - 节点列表与延迟测试（渐进式柱状图）
@@ -32,7 +32,7 @@
 
 1. 下载最新 [release](https://github.com/RyanRaw/tailscale-root/releases) 的 zip
 2. 通过 KernelSU / Magisk / APatch 管理器安装
-3. 重启手机，内置二进制会自动部署到 `/data/adb/tailscale/bin/`
+3. 重启手机，离线包会自动部署到 `/data/adb/tailscale/bin/`（已经有二进制时不会覆盖）
 4. 从 KernelSU 管理器打开本模块的 WebUI，登录并连接
 
 全部操作都可以在 WebUI 内完成，不需要命令行。
@@ -43,7 +43,7 @@
 | --- | --- |
 | 状态 | 查看连接状态 / 账号 / 节点数；启动、停止、重启守护进程（含当前运行的二进制路径）；获取登录链接（拿到后自动用默认浏览器打开）；断开、登出；网络诊断快照；Box Guard 状态 |
 | 节点 | 查看所有节点、测延迟 |
-| 安装 | 安装 / 切换 / 重装内置版本；在线安装（指定版本或自定义 URL）；在外置与内置之间手动切换，外置可一键删除并回滚（可扫描设备文件） |
+| 安装 | 当前版本 / 来源 / 是否锁定；检查更新 + 更新到最新；装指定版本、自定义 URL、本地文件（可扫描设备文件）；用离线包重装兜底 |
 | 日志 | 6 类来源（守护进程 / 网络诊断 / 登录 / 看门狗 / DNS / 二进制部署）；跟随刷新、清空当前日志 |
 | 设置 | 主题；`TS_PROXY`、`TS_PORT`、`TS_HOSTNAME`、`TS_WAKELOCK`、`TS_ROUTE_GUARD`、`TS_TUN`、`TS_EXTRA_ARGS`、`TS_LOGIN_SERVER`、`TS_AUTHKEY`、`TS_UP_ARGS`、`TS_DNS`、`TS_LOGLEVEL`；保存即自动重启守护进程 |
 
@@ -123,27 +123,40 @@ WebUI 日志页右上角可以切换日志源：守护进程 / 网络诊断 / �
 - 切换控制服务器后建议在状态页用「重启」让守护进程重新连接；`--reset` 只需要在切换那一次使用
 - DERP 中继默认走官方公共 DERP；如需只用自建 DERP，可在 `TS_EXTRA_ARGS` 中追加相应参数
 
-## 自建 / 第三方 tailscaled
+## 换版本（在线 / 指定版本 / 本地文件）
 
-支持运行自己编译的守护进程（自行打补丁、`--netfilter-mode=off`、userspace networking 等），全程在 WebUI 内操作：
+模块里**只有一份** `tailscale` / `tailscaled`（`/data/adb/tailscale/bin/`）。三个入口装的是同一个位置，来源只是信息，记在 `bin/.installed`：
 
-1. 把二进制或官方 tgz 包放到手机上，例如 `/sdcard/Download/`
-2. 打开 WebUI → 安装页 → **外置二进制**
-3. 点「扫描设备文件」自动列出常用目录（`/sdcard/Download`、`/sdcard`、`/data/local/tmp`）里的 tailscale 相关文件，点一下即可填入路径；也可以手动输入路径
-4. 点「切换为外置」
+| 入口 | 做什么 | 装完锁定？ |
+| --- | --- | --- |
+| 更新到最新 | 从 GitHub 取最新稳定版 | 否 |
+| 指定版本 | `tailscale_<版本>_arm64.tgz` | **是** |
+| 自定义 URL | 任意官方 `.tgz` 链接 | **是** |
+| 本地文件 | 单个 `tailscaled`、目录、官方 `.tgz` | **是** |
+| 用离线包重装 | 模块自带的那份 | 否（覆盖并解锁） |
 
-支持的输入形式：
+**锁定**的含义：你明确指定过版本，就不会被"更新到最新"悄悄换掉 —— 安装页那个按钮会变灰，脚本层也会拒绝（`install_version.sh` 退出码 6）。要换版本必须显式操作，或先点「解除锁定」。
+
+本地文件支持的输入形式：
 
 - 单个可执行文件 `tailscaled`（只替换守护进程，CLI 保持不变）
 - 一个目录，内含 `tailscaled`，有 `tailscale` 时一并替换
 - 官方 `.tgz` / `.tar.gz` 包（自动解包并取其中的 `tailscaled`、`tailscale`）
 - 也可以单独填写「CLI 路径」来一并替换 `tailscale` 命令
 
-安装过程会先复制到暂存文件并用 `--version` 试运行校验，架构不匹配或不是 tailscaled 的文件会被拒绝，不会破坏现有可用版本；校验通过后停止守护进程、原子替换并自动重启。
+安装过程会先复制到暂存文件并用 `--version` 试运行校验，架构不匹配或不是 tailscaled 的文件会被直接拒绝，**不会破坏现有可用版本**；校验通过后才停守护进程、原子替换并自动重启。
 
-自定义版本会被标记为用户自管（`bin/.custom`），模块升级、开机自动部署都不会覆盖它；安装页顶部「当前来源」会显示现在跑的是内置还是外置，以及 `/proc/<pid>/exe` 里的真实路径。改回内置点「切换到内置」即可。
+**开机兜底**：`install_bins.sh` 只在检测不到可用二进制时才部署离线包，已经有一份能跑的就一概不动 —— 所以你在 WebUI 里装的版本不会在重启后被离线包顶回去，也不再存在"内置/外置"两套状态。
 
-外置装完原始文件会留在原处（安装只复制副本）。点「删除外置」会：停守护进程 → 删掉 `bin` 下的外置副本与标记 → 一并删除外置存储（`/sdcard`、`/data/local/tmp` 等）上的来源文件 → 有内置包时自动回滚内置并重启守护进程。模块目录和系统路径下的文件一律不动。
+命令行等价用法（排障时方便）：
+
+```sh
+sh /data/adb/modules/tailscale_root/install_version.sh --online          # 更新到最新
+sh /data/adb/modules/tailscale_root/install_version.sh --online 1.98.8   # 指定版本（锁定）
+sh /data/adb/modules/tailscale_root/install_version.sh --local /sdcard/Download/tailscaled
+sh /data/adb/modules/tailscale_root/install_version.sh --pin off         # 解除锁定
+sh /data/adb/modules/tailscale_root/install_bins.sh --info               # 当前版本/来源/锁定
+```
 
 自建版本如需额外参数，在设置页填 `TS_EXTRA_ARGS`；TUN 网卡名不同则改 `TS_TUN`。请保持进程名为 `tailscaled`（安装器已自动重命名），因为看门狗、KSU 操作按钮和状态检测都按该进程名匹配。
 
@@ -195,16 +208,16 @@ DNS 系统属性、以及 ping 测试结果，排查时把这段输出发出来�
 - **切换控制服务器后登录报错**：设置页把 `TS_UP_ARGS` 设为 `--reset` 再登录一次（只需一次）
 - **自签证书报 TLS 错误**：把服务端 CA 装进系统证书，或改用受信任的域名证书
 - **登录链接拿不到**：状态页会显示 `tailscale up` 的原始错误，按提示排查地址/证书/网络
-- **自建二进制跑不起来**：安装页会显示 `--version` 的实际输出，多为架构不匹配（如 32 位设备装了 arm64 包）
+- **换的版本跑不起来**：安装页会显示 `--version` 的实际输出，多为架构不匹配（如 32 位设备装了 arm64 包）；校验失败时原版本不受影响
 
 ## 项目结构
 
 ```
 module/                 # KSU 模块文件（打包发布的内容）
 ├── module.prop
-├── bins/               # 内置二进制：bins/<arch>/{tailscale,tailscaled,VERSION}
-├── install_bins.sh     # 部署 / 更新内置二进制
-├── install_custom.sh   # 安装自建二进制（标记为用户自管）
+├── bins/               # 离线包：bins/<arch>/{tailscale,tailscaled,VERSION}
+├── install_bins.sh     # 离线包兜底部署（只在没有二进制时）
+├── install_version.sh  # 统一安装入口：在线 / 指定版本 / 本地文件 + 锁定
 ├── update_resolv.sh    # 生成 /etc/resolv.conf（静态 Go 二进制不认 netd）
 ├── ts_up.sh            # 按 env 配置登录（支持自建控制服务器 / 预授权密钥）
 ├── system/etc/resolv.conf  # 叠加到 /system 的 DNS 配置占位文件
@@ -212,7 +225,7 @@ module/                 # KSU 模块文件（打包发布的内容）
 ├── action.sh           # KSU 操作按钮：一键启停
 ├── svm_guard.sh        # src_valid_mark 看门狗 + 健康检查
 ├── update_desc.sh      # 模块描述状态刷新
-├── post-fs-data.sh     # 目录初始化 + 内置二进制部署
+├── post-fs-data.sh     # 目录初始化 + 离线包兜底部署
 └── webroot/index.html  # 构建后的 WebUI（单文件）
 
 webui/                  # WebUI 源码（Vue 3 + Tailwind CSS + DaisyUI）
