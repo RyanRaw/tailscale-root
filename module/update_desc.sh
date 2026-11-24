@@ -20,6 +20,7 @@ TS_DIR=/data/adb/tailscale
 TS="$TS_DIR/bin/tailscale"
 PROP=/data/adb/modules/tailscale_root/module.prop
 DEFAULT="$TS_DIR/module.prop.default"
+VCACHE="$TS_DIR/state/version.cache"
 # 探测一次要跑 3 次 tailscale CLI（实测约 370ms），比那些只需读文件的模块贵得多，
 # 所以间隔取 60 秒（它们用 15~120 秒，且探针几乎零成本）。
 INTERVAL=60
@@ -38,6 +39,26 @@ ensure_prop() {
   [ -s "$PROP" ]
 }
 
+# `tailscale --version` 要 70ms，占一次探针的 19%，而版本只在换二进制时才变。
+# 用二进制的 size+mtime 当 key 缓存住：换了二进制 key 就变，自然失效；缓存文件
+# 自己被写坏（同样的 f2fs 掉电问题）时前缀匹配不上，也会退回去重新探测并覆盖写，
+# 不需要额外处理。
+cached_version() {
+  key=$(stat -c '%s-%Y' "$TS" 2>/dev/null)
+  if [ -n "$key" ] && [ -s "$VCACHE" ]; then
+    vc=$(cat "$VCACHE" 2>/dev/null)
+    case "$vc" in
+      "$key "*) echo "${vc#"$key "}"; return ;;
+    esac
+  fi
+  ver=$(timeout 8 $TS --version 2>/dev/null | head -1)
+  if [ -n "$key" ] && [ -n "$ver" ]; then
+    printf '%s %s\n' "$key" "$ver" > "$VCACHE.tmp.$$" 2>/dev/null &&
+      mv -f "$VCACHE.tmp.$$" "$VCACHE" 2>/dev/null
+  fi
+  echo "$ver"
+}
+
 # 算出当前应该显示的描述，打到 stdout
 current_desc() {
   if [ ! -x "$TS" ]; then
@@ -51,7 +72,7 @@ current_desc() {
   # localapi 卡住时 status 会一直不返回（控制面 long-poll 断开后实测会出现）：
   # 这里不设上限的话，整个刷新循环就被永久钉死，而且每轮还会再多留一个挂死的
   # CLI 进程，最后 WebUI / route_guard 全部转圈。所以一律过 timeout。
-  ver=$(timeout 8 $TS --version 2>/dev/null | head -1)
+  ver=$(cached_version)
   line=$(timeout 8 $TS --socket="$TS_DIR/sock" status 2>/dev/null | head -1)
   if echo "$line" | grep -q "^100\."; then
     ip=$(echo "$line" | awk '{print $1}')
