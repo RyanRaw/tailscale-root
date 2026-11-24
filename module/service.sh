@@ -32,7 +32,7 @@ if [ -z "$TS_RESTART_ONLY" ]; then
     sleep 8
     n=0
     while true; do
-      sh "$MODDIR/update_desc.sh"
+      # 模块描述由 update_desc.sh 自己的 watch 循环负责（见下方），这里只管看门狗
       ensure_svm_guard
       n=$((n + 1))
       [ $((n % 60)) -eq 0 ] && sh "$MODDIR/ts_hosts.sh" --hosts >/dev/null 2>&1
@@ -43,6 +43,12 @@ if [ -z "$TS_RESTART_ONLY" ]; then
   # Event driven re-resolve: netlink tells us the moment the uplink changes.
   if ! pgrep -f "$MODDIR/ts_netwatch.sh" >/dev/null 2>&1; then
     nohup sh "$MODDIR/ts_netwatch.sh" </dev/null >/dev/null 2>&1 &
+  fi
+
+  # Module description: own watch loop, same shape as the other KSU modules
+  # (idempotent rewrite only when the text actually changed). See update_desc.sh.
+  if ! pgrep -f "$MODDIR/update_desc.sh watch" >/dev/null 2>&1; then
+    nohup sh "$MODDIR/update_desc.sh" watch </dev/null >/dev/null 2>&1 &
   fi
 fi
 
